@@ -62,8 +62,13 @@ class Journal:
                 row = self.db.execute("SELECT * FROM instance").fetchone()
                 if row is None:
                     self.db.execute("INSERT INTO instance(instance_id,fingerprint,codex_version) VALUES(?,?,?)", (instance_id, fingerprint, codex_version))
-                elif (row["instance_id"], row["fingerprint"], row["codex_version"]) != (instance_id, fingerprint, codex_version):
-                    raise IntegrityConflict("instance/configuration/version changed; explicit state migration required")
+                elif (row["instance_id"], row["fingerprint"]) != (instance_id, fingerprint):
+                    raise IntegrityConflict("instance/configuration changed; explicit state migration required")
+                elif row["codex_version"] != codex_version:
+                    # The caller passes only a reviewed build (Config.validate).
+                    self.db.execute("UPDATE instance SET codex_version=?", (codex_version,))
+                    self.db.execute("INSERT INTO audit(event_id,ts,action,note) VALUES(NULL,?,?,?)",
+                                    (utc_now(), "codex_version_changed", f"{row['codex_version']} -> {codex_version}"))
                 # A committed dispatch before a crash can never be assumed unsent.
                 self.db.execute("UPDATE operator_runs SET state='uncertain' WHERE state='dispatching'")
                 for event in self.db.execute("SELECT event_id FROM events WHERE state='dispatching'").fetchall():

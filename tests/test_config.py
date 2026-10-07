@@ -15,6 +15,9 @@ def test_explicit_paths_and_private_state(tmp_path):
     original = config.fingerprint()
     config.poll_interval_ms = 2000
     assert config.fingerprint() == original
+    config.codex_version = 'codex-cli 0.161.0'
+    assert config.fingerprint() == original, 'the journal audits a build change; it is not a new instance'
+    config.codex_version = 'codex-cli 0.160.1'
     config.self_address = 'other@example.test'
     assert config.fingerprint() != original
 

@@ -9,7 +9,12 @@ import stat
 import tomllib
 
 ADDR_SPEC = re.compile(r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9.-]+")
-SUPPORTED_CODEX = "codex-cli 0.160.1"
+# Codex builds whose app-server protocol has been reviewed against the
+# committed schema subset (compatibility/). A deployment states which one it
+# runs; any other is refused. Add a build only after re-running the
+# compatibility probes against it.
+SUPPORTED_CODEX_VERSIONS = ("codex-cli 0.160.1",)
+SUPPORTED_CODEX = SUPPORTED_CODEX_VERSIONS[0]
 
 @dataclass(frozen=True)
 class Lane:
@@ -97,8 +102,8 @@ class Config:
             raise ValueError("peer lane requires self_address")
         if not isinstance(self.launch_argv, list) or not self.launch_argv or any(not isinstance(a, str) or not a or "\x00" in a for a in self.launch_argv):
             raise ValueError("launch_argv must be an explicit nonempty argument vector")
-        if self.codex_version != SUPPORTED_CODEX:
-            raise ValueError(f"codex_version must be {SUPPORTED_CODEX}")
+        if self.codex_version not in SUPPORTED_CODEX_VERSIONS:
+            raise ValueError(f"codex_version must be one of {', '.join(SUPPORTED_CODEX_VERSIONS)}")
         if self.sandbox not in {"read-only", "workspace-write", "danger-full-access"}:
             raise ValueError("unsupported sandbox")
         if self.approval_policy not in {"untrusted", "on-failure", "on-request", "never"}:
@@ -194,6 +199,9 @@ class Config:
         # Operational polling/timeouts can change without migrating mailbox state.
         for key in ("poll_interval_ms", "max_pending_events", "rpc_timeout_seconds", "turn_watchdog_seconds", "shutdown_grace_seconds", "publication_grace_seconds", "launcher_control_timeout_seconds"):
             value.pop(key)
+        # The journal records the Codex build separately: a move between
+        # reviewed builds is audited there, not refused as a new instance.
+        value.pop("codex_version")
         for key in ("launcher_control_argv", "deployment_id", "owner_domain", "trusted_config_file"):
             if value[key] is None:
                 value.pop(key)

@@ -10,7 +10,10 @@ The installed binary generated the committed protocol subset with
 the experimental API, completes `initialize` before `initialized`, and uses
 the generated `developerInstructions` field on both start and resume.
 The launcher's actual initialization user-agent version is checked before
-starting a thread. Configuration is pinned to this build.
+starting a thread. A deployment states which reviewed build it runs (`SUPPORTED_CODEX_VERSIONS` in
+`src/amap_codex/config.py`); any other is refused. A move between reviewed builds
+keeps the journal and its thread and is recorded in its audit table. Add a build
+only after re-running these probes against it.
 
 [live-host-probe.json](live-host-probe.json) records a real authenticated
 host-side run using the account's selected `gpt-6.1-sol`, low reasoning effort,
