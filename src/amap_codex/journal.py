@@ -16,7 +16,7 @@ def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 class Journal:
-    def __init__(self, path, instance_id, fingerprint, codex_version, *, clock=time.time):
+    def __init__(self, path, instance_id, fingerprint, codex_version, codex_model, *, clock=time.time):
         path = Path(path)
         if path.is_dir():
             path = path / "journal.sqlite3"
@@ -32,6 +32,7 @@ class Journal:
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS instance (
           instance_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, codex_version TEXT NOT NULL,
+          codex_model TEXT NOT NULL,
           thread_id TEXT, last_error TEXT);
         CREATE TABLE IF NOT EXISTS events (
           event_id TEXT PRIMARY KEY, instance_id TEXT NOT NULL, lane TEXT NOT NULL,
@@ -61,14 +62,19 @@ class Journal:
             with self._transaction():
                 row = self.db.execute("SELECT * FROM instance").fetchone()
                 if row is None:
-                    self.db.execute("INSERT INTO instance(instance_id,fingerprint,codex_version) VALUES(?,?,?)", (instance_id, fingerprint, codex_version))
+                    self.db.execute("INSERT INTO instance(instance_id,fingerprint,codex_version,codex_model) VALUES(?,?,?,?)",
+                                    (instance_id, fingerprint, codex_version, codex_model))
                 elif (row["instance_id"], row["fingerprint"]) != (instance_id, fingerprint):
                     raise IntegrityConflict("instance/configuration changed; explicit state migration required")
-                elif row["codex_version"] != codex_version:
-                    # The caller passes only a reviewed build (Config.validate).
-                    self.db.execute("UPDATE instance SET codex_version=?", (codex_version,))
-                    self.db.execute("INSERT INTO audit(event_id,ts,action,note) VALUES(NULL,?,?,?)",
-                                    (utc_now(), "codex_version_changed", f"{row['codex_version']} -> {codex_version}"))
+                else:
+                    # The build and the model can change under one instance:
+                    # each move is audited, never refused. The caller passes
+                    # only a reviewed build (Config.validate).
+                    for column, value in (("codex_version", codex_version), ("codex_model", codex_model)):
+                        if row[column] != value:
+                            self.db.execute(f"UPDATE instance SET {column}=?", (value,))
+                            self.db.execute("INSERT INTO audit(event_id,ts,action,note) VALUES(NULL,?,?,?)",
+                                            (utc_now(), f"{column}_changed", f"{row[column]} -> {value}"))
                 # A committed dispatch before a crash can never be assumed unsent.
                 self.db.execute("UPDATE operator_runs SET state='uncertain' WHERE state='dispatching'")
                 for event in self.db.execute("SELECT event_id FROM events WHERE state='dispatching'").fetchall():

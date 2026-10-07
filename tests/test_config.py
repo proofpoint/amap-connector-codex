@@ -18,6 +18,9 @@ def test_explicit_paths_and_private_state(tmp_path):
     config.codex_version = 'codex-cli 0.161.0'
     assert config.fingerprint() == original, 'the journal audits a build change; it is not a new instance'
     config.codex_version = 'codex-cli 0.160.1'
+    config.codex_model = 'gpt-other'
+    assert config.fingerprint() == original, 'the journal audits a model change; it is not a new instance'
+    config.codex_model = 'gpt-test'
     config.self_address = 'other@example.test'
     assert config.fingerprint() != original
 

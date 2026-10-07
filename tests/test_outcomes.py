@@ -5,7 +5,7 @@ from amap_codex.outcomes import OutcomePublisher, OutcomeUncertain
 from amap_codex.spool import Admission, event_id
 
 def setup(tmp_path):
-    db = Journal(tmp_path/'journal.db','instance-a','fingerprint','codex-cli 0.160.1')
+    db = Journal(tmp_path/'journal.db','instance-a','fingerprint','codex-cli 0.160.1','gpt-test')
     identifier = 'receiver_notice_123'
     eid = event_id('instance-a','peer',identifier)
     db.admit(Admission(eid,'peer',identifier,'a'*64,{'event_id':eid,'lane':'peer','notice_id':identifier}))
@@ -25,7 +25,7 @@ def test_atomic_committed_shape_and_no_absence_replay(tmp_path):
     path.unlink()
     assert publisher.publish_pending()==0
     db.close()
-    db=Journal(tmp_path/'journal.db','instance-a','fingerprint','codex-cli 0.160.1')
+    db=Journal(tmp_path/'journal.db','instance-a','fingerprint','codex-cli 0.160.1','gpt-test')
     assert OutcomePublisher(db,directory).publish_pending()==0
     assert not path.exists()
     db.close()

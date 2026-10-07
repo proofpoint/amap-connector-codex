@@ -142,7 +142,7 @@ class Supervisor:
         self.ownership.acquire()
         try:
             c = self.config
-            self.journal = Journal(c.state_dir, c.instance_id, c.fingerprint(), c.codex_version)
+            self.journal = Journal(c.state_dir, c.instance_id, c.fingerprint(), c.codex_version, c.codex_model)
             self.publisher = OutcomePublisher(self.journal, c.outcome_dir,
                                                idempotent_replay=c.outcome_idempotent_replay)
             if self.ownership.control:

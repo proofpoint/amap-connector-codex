@@ -10,7 +10,7 @@ def admission(identifier='receiver_notice_123',lane='peer',digest='a'*64,state='
 
 def journal(tmp_path,clock=None):
     kwargs = {'clock':clock} if clock else {}
-    return Journal(tmp_path/'journal.db','instance-a','config-fingerprint','codex-cli 0.160.1',**kwargs)
+    return Journal(tmp_path/'journal.db','instance-a','config-fingerprint','codex-cli 0.160.1','gpt-test',**kwargs)
 
 def test_durable_acceptance_no_replay(tmp_path):
     db = journal(tmp_path)
@@ -72,19 +72,31 @@ def test_integrity_and_binding_conflicts(tmp_path):
     db.bind_thread('thread-a')
     with pytest.raises(IntegrityConflict): db.bind_thread('thread-b')
     db.close()
-    with pytest.raises(IntegrityConflict): Journal(tmp_path/'journal.db','another-instance','config-fingerprint','codex-cli 0.160.1')
-    with pytest.raises(IntegrityConflict): Journal(tmp_path/'journal.db','instance-a','changed-settings','codex-cli 0.160.1')
+    with pytest.raises(IntegrityConflict): Journal(tmp_path/'journal.db','another-instance','config-fingerprint','codex-cli 0.160.1','gpt-test')
+    with pytest.raises(IntegrityConflict): Journal(tmp_path/'journal.db','instance-a','changed-settings','codex-cli 0.160.1','gpt-test')
 
 
 def test_a_codex_build_change_is_audited_and_keeps_the_instance(tmp_path):
     db = journal(tmp_path); db.admit(admission()); db.bind_thread('thread-a'); db.close()
-    db = Journal(tmp_path/'journal.db','instance-a','config-fingerprint','codex-cli 0.161.0')
+    db = Journal(tmp_path/'journal.db','instance-a','config-fingerprint','codex-cli 0.161.0','gpt-test')
     try:
         assert db.thread_id == 'thread-a'
         assert db.event(admission().event_id)['state'] == 'pending'
         assert db.db.execute("SELECT codex_version FROM instance").fetchone()[0] == 'codex-cli 0.161.0'
         notes = [tuple(r) for r in db.db.execute("SELECT action,note FROM audit")]
         assert notes == [('codex_version_changed', 'codex-cli 0.160.1 -> codex-cli 0.161.0')]
+    finally:
+        db.close()
+
+def test_a_model_change_is_audited_and_keeps_the_instance(tmp_path):
+    db = journal(tmp_path); db.admit(admission()); db.bind_thread('thread-a'); db.close()
+    db = Journal(tmp_path/'journal.db','instance-a','config-fingerprint','codex-cli 0.160.1','gpt-other')
+    try:
+        assert db.thread_id == 'thread-a'
+        assert db.event(admission().event_id)['state'] == 'pending'
+        assert db.db.execute("SELECT codex_model FROM instance").fetchone()[0] == 'gpt-other'
+        notes = [tuple(r) for r in db.db.execute("SELECT action,note FROM audit")]
+        assert notes == [('codex_model_changed', 'gpt-test -> gpt-other')]
     finally:
         db.close()
 

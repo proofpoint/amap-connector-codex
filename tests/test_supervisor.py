@@ -154,7 +154,7 @@ def test_absent_original_input_in_partial_history_holds_instance(tmp_path):
     config=config_for(tmp_path,'busy')
     eid=publish(config)
     publish(config,'receiver_notice_b')
-    with Journal(config.state_dir,config.instance_id,config.fingerprint(),config.codex_version) as journal:
+    with Journal(config.state_dir,config.instance_id,config.fingerprint(),config.codex_version, config.codex_model) as journal:
         records=list(Scanner().scan(config.lanes[0],config.instance_id,config.self_address))
         for record in records: journal.admit(record)
         journal.bind_thread('thread-fixture'); journal.begin_attempt(eid,41)

@@ -199,9 +199,10 @@ class Config:
         # Operational polling/timeouts can change without migrating mailbox state.
         for key in ("poll_interval_ms", "max_pending_events", "rpc_timeout_seconds", "turn_watchdog_seconds", "shutdown_grace_seconds", "publication_grace_seconds", "launcher_control_timeout_seconds"):
             value.pop(key)
-        # The journal records the Codex build separately: a move between
-        # reviewed builds is audited there, not refused as a new instance.
+        # The journal records the Codex build and the model separately: a
+        # move of either is audited there, not refused as a new instance.
         value.pop("codex_version")
+        value.pop("codex_model")
         for key in ("launcher_control_argv", "deployment_id", "owner_domain", "trusted_config_file"):
             if value[key] is None:
                 value.pop(key)

@@ -97,18 +97,18 @@ def test_kickoff_serial_durable_and_deduplicated_on_restart(tmp_path):
 
 def test_committed_operator_attempt_is_uncertain_and_blocks_mail(tmp_path):
     c=replace(config_for(tmp_path),operator_kickoff_enabled=True)
-    with Journal(c.state_dir,c.instance_id,c.fingerprint(),c.codex_version) as j:
+    with Journal(c.state_dir,c.instance_id,c.fingerprint(),c.codex_version, c.codex_model) as j:
         j.bind_thread('thread-fixture'); j.admit_operator('R1','hash'); j.begin_operator('R1',8)
-    with Journal(c.state_dir,c.instance_id,c.fingerprint(),c.codex_version) as j:
+    with Journal(c.state_dir,c.instance_id,c.fingerprint(),c.codex_version, c.codex_model) as j:
         assert j.operator_runs()[0]['state']=='uncertain'
         assert j.next_pending() is None
 
 
 def test_operator_disposition_is_audited_and_never_resends(tmp_path):
     c=replace(config_for(tmp_path),operator_kickoff_enabled=True)
-    with Journal(c.state_dir,c.instance_id,c.fingerprint(),c.codex_version) as j:
+    with Journal(c.state_dir,c.instance_id,c.fingerprint(),c.codex_version, c.codex_model) as j:
         j.bind_thread('thread-fixture'); j.admit_operator('R1','hash'); j.begin_operator('R1',8)
-    with Journal(c.state_dir,c.instance_id,c.fingerprint(),c.codex_version) as j:
+    with Journal(c.state_dir,c.instance_id,c.fingerprint(),c.codex_version, c.codex_model) as j:
         j.dispose_operator('R1','hold','Original-input evidence incomplete')
         assert j.operator_blocked()
         j.dispose_operator('R1','handled','Operator reviewed effects and retired this run')
@@ -145,7 +145,7 @@ def test_trusted_configuration_requires_exact_registry_and_hashes_content(tmp_pa
 
 def test_accepted_operator_can_be_retired_without_completion_evidence(tmp_path):
     c=replace(config_for(tmp_path),operator_kickoff_enabled=True)
-    with Journal(c.state_dir,c.instance_id,c.fingerprint(),c.codex_version) as j:
+    with Journal(c.state_dir,c.instance_id,c.fingerprint(),c.codex_version, c.codex_model) as j:
         j.bind_thread('thread-fixture'); j.admit_operator('R1','hash'); j.begin_operator('R1',8)
         j.operator_result('R1','accepted',turn_id='accepted-turn')
         j.dispose_operator('R1','handled','Controller stopped; operator inspected effects and retired run')

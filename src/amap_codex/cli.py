@@ -79,7 +79,7 @@ async def doctor_probe(config):
         if supervisor.ownership.control:
             supervisor._record_process(os.getpid(), None)
         thread_id = await supervisor.delivery.start_or_resume(status.get('thread_id'))
-        supervisor.journal = Journal(config.state_dir, config.instance_id, config.fingerprint(), config.codex_version)
+        supervisor.journal = Journal(config.state_dir, config.instance_id, config.fingerprint(), config.codex_version, config.codex_model)
         supervisor.journal.bind_thread(thread_id)
         await supervisor.reconcile()
         return {"thread_id": supervisor.delivery.thread_id,
@@ -150,14 +150,14 @@ def main(argv=None):
             print(json.dumps(result, indent=2))
         elif args.command == 'recover-operator':
             with Ownership(config), Journal(config.state_dir, config.instance_id,
-                                           config.fingerprint(), config.codex_version) as journal:
+                                           config.fingerprint(), config.codex_version, config.codex_model) as journal:
                 journal.dispose_operator(args.run_id, args.action, args.note)
                 print(json.dumps({'run_id': args.run_id, 'action': args.action, 'audited': True}))
         else:
             if not args.note.strip():
                 raise ValueError("a nonempty audit note is required")
             with Ownership(config), Journal(config.state_dir, config.instance_id,
-                                           config.fingerprint(), config.codex_version) as journal:
+                                           config.fingerprint(), config.codex_version, config.codex_model) as journal:
                 if args.action == "retry":
                     if not args.evidence_reference or not args.evidence_reference.strip():
                         raise ValueError("retry requires a positive no-action evidence reference")

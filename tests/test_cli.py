@@ -40,7 +40,7 @@ def unresolved(config):
     eid=event_id(config.instance_id,'mail','receiver_notice_a')
     record=Admission(eid,'mail','receiver_notice_a','a'*64,
         {'event_id':eid,'lane':'mail','notice_id':'receiver_notice_a'})
-    with Journal(config.state_dir,config.instance_id,config.fingerprint(),config.codex_version) as journal:
+    with Journal(config.state_dir,config.instance_id,config.fingerprint(),config.codex_version, config.codex_model) as journal:
         journal.admit(record); journal.bind_thread('thread-fixture'); journal.begin_attempt(eid,41)
     return eid
 
