@@ -35,7 +35,8 @@ Probes that need no login, each also re-run on 0.160.1 for comparison:
   fourth changes one description string. The committed subset stays 0.160.1's.
 - **Three-server registry.** [mcp-registry-probe-0.161.0.json](mcp-registry-probe-0.161.0.json):
   a thread is created and its effective registry is exactly the three
-  trusted servers and their tool sets.
+  trusted servers and their tool sets, with the agent's own two servers
+  listed and switched off.
 - **MCP environment.** Without `env_vars` a stdio server receives only `HOME`
   and `PATH`, and the required servers fail to start; with it, exactly the
   listed variables arrive. Same as 0.160.1.
@@ -113,5 +114,14 @@ the effective server names and exact tool sets without any inference or submissi
 Reproduce with `python tests/integration/mcp_registry_probe.py --model MODEL
 --output compatibility/mcp-registry-probe.json`. Thread overrides are sent on
 start/resume and the actual registry is checked: CLI TOML map overrides merge
-ambient MCP registrations rather than necessarily replacing them. This probe
+ambient MCP registrations rather than necessarily replacing them.
+
+**The agent's own MCP servers are switched off for the thread.** Measured on
+0.160.1 and 0.161.0: servers the agent's Codex configuration registers join a
+thread beside the trusted three. Before each start or resume, the supervisor
+reads them with `config/read` (cwd = the thread's) and adds `enabled = false`
+for each to the thread's override. Such a server stays listed with no tools,
+and the check requires exactly that. A registration `config/read` does not
+report, or one named like a trusted server, is refused. The probe gives its
+Codex home two such servers, one enabled and one already disabled. This probe
 is host protocol evidence and does not close the live deployment gates.

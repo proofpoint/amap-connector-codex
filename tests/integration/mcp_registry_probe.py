@@ -19,8 +19,12 @@ async def probe(binary, model, output):
         root = Path(directory)
         for name in ('inbox/messages', 'peer/messages', 'outbox', 'roster', 'codex-home'):
             (root / name).mkdir(parents=True)
-        # Empty home keeps ambient user registrations out of this host probe.
-        (root / 'codex-home/config.toml').write_text('')
+        # The agent's own registrations, which the thread must switch off:
+        # one that would start, and one already disabled.
+        (root / 'codex-home/config.toml').write_text(
+            f'[mcp_servers.agent_own]\ncommand = "{repo}/bin/inbox-mcp-vol"\n'
+            f'env = {{ INBOX_MESSAGE_DIR = "{root}/inbox/messages", INBOX_LANE = "mail" }}\n'
+            '[mcp_servers.agent_off]\ncommand = "/nonexistent"\nenabled = false\n')
         servers = {}
         for name, tree, lane in [('inbox', 'inbox', 'mail'), ('delegation', 'peer', 'peer')]:
             servers[name] = {'command': str(repo / 'bin/inbox-mcp-vol'), 'required': True,
@@ -45,6 +49,7 @@ async def probe(binary, model, output):
                 'architecture': platform.machine(), 'expected_version': build,
                 'user_agent': delivery.client.initialize_result.get('userAgent'),
                 'thread_created': True, 'exact_server_and_tool_registry': True,
+                'agent_servers_switched_off': delivery.disabled_servers,
                 'inference': False, 'submissions': 0}
             Path(output).write_text(json.dumps(evidence, indent=2) + '\n')
             print(json.dumps(evidence))

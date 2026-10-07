@@ -121,3 +121,57 @@ def test_blocked_protocol_write_is_bounded_and_uncertain(monkeypatch):
         finally:
             await delivery.stop()
     asyncio.run(check())
+
+
+TRUSTED = {"mcp_servers": {
+    "inbox": {"enabled_tools": ["list_messages", "read_message", "read_attachment"]},
+    "delegation": {"enabled_tools": ["list_messages", "read_message", "read_attachment"]},
+    "inbox_submit": {"enabled_tools": ["submit", "submit_result", "peers"]}}}
+
+
+def trusted_adapter(monkeypatch, **env):
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    client = AppServerClient([sys.executable, FAKE, "normal"], timeout=2)
+    return AppServerDelivery(client, model=None, cwd="/work", sandbox="workspace-write",
+                             approval_policy="never", instructions="trusted", trusted_config=TRUSTED)
+
+
+def start(delivery):
+    async def check():
+        try:
+            return await delivery.start_or_resume()
+        finally:
+            await delivery.stop()
+    return asyncio.run(check())
+
+
+def test_the_agents_own_mcp_servers_are_switched_off_for_the_thread(monkeypatch):
+    delivery = trusted_adapter(monkeypatch, FAKE_AMBIENT_MCP=json.dumps(
+        {"agent_own": {"command": "/bin/true"}, "agent_off": {"command": "/x", "enabled": False}}))
+    assert start(delivery) == "thread-fixture"
+    assert delivery.disabled_servers == ["agent_off", "agent_own"]
+    assert delivery.trusted_config == TRUSTED, "the trusted configuration itself is not changed"
+
+
+def test_no_agent_servers_starts_with_exactly_the_trusted_three(monkeypatch):
+    assert start(trusted_adapter(monkeypatch)) == "thread-fixture"
+
+
+def test_an_agent_server_with_a_trusted_name_is_refused(monkeypatch):
+    delivery = trusted_adapter(monkeypatch, FAKE_AMBIENT_MCP=json.dumps({"inbox": {"command": "/bin/true"}}))
+    with pytest.raises(RuntimeError, match="rename them"):
+        start(delivery)
+
+
+def test_a_switched_off_server_that_keeps_its_tools_is_refused(monkeypatch):
+    delivery = trusted_adapter(monkeypatch, FAKE_AMBIENT_MCP=json.dumps({"agent_own": {"command": "/bin/true"}}),
+                               FAKE_IGNORE_DISABLE="1")
+    with pytest.raises(RuntimeError, match="still exposes tools"):
+        start(delivery)
+
+
+def test_a_registration_config_read_did_not_report_is_refused(monkeypatch):
+    delivery = trusted_adapter(monkeypatch, FAKE_UNREPORTED_MCP="project_own")
+    with pytest.raises(RuntimeError, match="unexpected \\['project_own'\\]"):
+        start(delivery)

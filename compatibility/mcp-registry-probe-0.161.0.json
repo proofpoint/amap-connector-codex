@@ -1,12 +1,16 @@
 {
   "scope": "pinned host MCP startup only; no isolation/router attestation",
-  "timestamp_utc": "2026-10-07T20:13:47.553713+00:00",
+  "timestamp_utc": "2026-10-07T21:08:24.876238+00:00",
   "os": "Linux",
   "architecture": "aarch64",
   "expected_version": "codex-cli 0.161.0",
   "user_agent": "amap_connector/0.161.0 (Debian 13.0.0; aarch64) tmux-256color (amap_connector; 0.1.0)",
   "thread_created": true,
   "exact_server_and_tool_registry": true,
+  "agent_servers_switched_off": [
+    "agent_off",
+    "agent_own"
+  ],
   "inference": false,
   "submissions": 0
 }

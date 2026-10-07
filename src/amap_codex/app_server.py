@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import contextlib
 import json
 import os
@@ -24,6 +25,9 @@ class RPCError(Exception):
         self.code = error.get("code")
         # Server strings can contain sender data; expose only the error code.
         super().__init__(f"app-server RPC error {self.code}")
+
+
+TRUSTED_SERVERS = frozenset({"inbox", "delegation", "inbox_submit"})
 
 
 def version_matches(user_agent: str, expected: str) -> bool:
@@ -254,6 +258,8 @@ class AppServerDelivery:
         if trusted_config is not None:
             self.settings['config'] = trusted_config
         self.thread_id: str | None = None
+        # The agent's own MCP servers the bound thread runs with switched off.
+        self.disabled_servers: list[str] = []
 
     async def start_or_resume(self, thread_id: str | None = None) -> str:
         await self.client.start()
@@ -263,6 +269,10 @@ class AppServerDelivery:
             params["threadId"] = thread_id
         else:
             params["ephemeral"] = False
+        disabled = set()
+        if self.trusted_config is not None:
+            params["config"], disabled = await self._thread_config()
+        self.disabled_servers = sorted(disabled)
         result = await self.client.request(method, params)
         actual = result.get("thread", {}).get("id")
         if not isinstance(actual, str) or not actual or (thread_id and actual != thread_id):
@@ -279,13 +289,38 @@ class AppServerDelivery:
                 cursor=page.get('nextCursor')
                 if cursor is None: break
             else: raise RuntimeError('MCP registry exceeded expected bound')
-            if {s.get('name') for s in statuses} != {'inbox','delegation','inbox_submit'}:
-                raise RuntimeError('effective MCP registry differs from trusted configuration')
+            names={s.get('name') for s in statuses}
+            if names != TRUSTED_SERVERS | disabled:
+                raise RuntimeError('effective MCP registry differs from trusted configuration: '
+                                   f'unexpected {sorted(map(str, names - TRUSTED_SERVERS - disabled))}, '
+                                   f'missing {sorted((TRUSTED_SERVERS | disabled) - names)}')
             for server in statuses:
+                if server['name'] in disabled:
+                    if server.get('tools'):
+                        raise RuntimeError(f"the agent's own MCP server {server['name']!r} still exposes tools")
+                    continue
                 expected=set(self.trusted_config['mcp_servers'][server['name']]['enabled_tools'])
                 if set(server.get('tools',{})) != expected or server.get('toolsError'):
                     raise RuntimeError('effective MCP tools differ from trusted allowlist')
         return actual
+
+    async def _thread_config(self):
+        """The thread's MCP configuration: the trusted servers, and every
+        server the agent's own Codex configuration registers switched off.
+        Codex merges a thread's MCP override into the registrations it
+        already has, so those would otherwise join the thread."""
+        read = await self.client.request("config/read", {"cwd": self.settings["cwd"]})
+        servers = (read.get("config") or {}).get("mcp_servers") or {}
+        if not isinstance(servers, dict):
+            raise RuntimeError("config/read returned an MCP server table that is not a table")
+        clash = sorted(set(servers) & TRUSTED_SERVERS)
+        if clash:
+            raise RuntimeError(f"the agent's Codex configuration registers MCP server(s) {clash}, "
+                               "names the AMAP servers use; rename them there")
+        disabled = set(servers) - TRUSTED_SERVERS
+        config = copy.deepcopy(self.trusted_config)
+        config["mcp_servers"].update({name: {"enabled": False} for name in sorted(disabled)})
+        return config, disabled
 
     def turn_params(self, payload: dict) -> dict:
         output = json.dumps(payload, sort_keys=True, separators=(",", ":"))
