@@ -1,7 +1,7 @@
 import json
 import sqlite3
 import pytest
-from amap_codex.journal import Journal, IntegrityConflict, StateConflict
+from amap_codex.journal import DEFAULT_MODEL, Journal, IntegrityConflict, StateConflict
 from amap_codex.spool import Admission, event_id
 
 def admission(identifier='receiver_notice_123',lane='peer',digest='a'*64,state='pending'):
@@ -97,6 +97,16 @@ def test_a_model_change_is_audited_and_keeps_the_instance(tmp_path):
         assert db.db.execute("SELECT codex_model FROM instance").fetchone()[0] == 'gpt-other'
         notes = [tuple(r) for r in db.db.execute("SELECT action,note FROM audit")]
         assert notes == [('codex_model_changed', 'gpt-test -> gpt-other')]
+    finally:
+        db.close()
+
+def test_no_model_is_recorded_as_codexs_default_and_a_move_to_it_is_audited(tmp_path):
+    db = journal(tmp_path); db.close()
+    db = Journal(tmp_path/'journal.db','instance-a','config-fingerprint','codex-cli 0.160.1',None)
+    try:
+        assert db.db.execute("SELECT codex_model FROM instance").fetchone()[0] == DEFAULT_MODEL
+        notes = [tuple(r) for r in db.db.execute("SELECT action,note FROM audit")]
+        assert notes == [('codex_model_changed', f'gpt-test -> {DEFAULT_MODEL}')]
     finally:
         db.close()
 

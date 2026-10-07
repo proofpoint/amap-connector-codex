@@ -15,6 +15,9 @@ class StateConflict(RuntimeError):
 def utc_now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
+# What the journal records for a configuration that names no model.
+DEFAULT_MODEL = "(codex default)"
+
 class Journal:
     def __init__(self, path, instance_id, fingerprint, codex_version, codex_model, *, clock=time.time):
         path = Path(path)
@@ -63,14 +66,14 @@ class Journal:
                 row = self.db.execute("SELECT * FROM instance").fetchone()
                 if row is None:
                     self.db.execute("INSERT INTO instance(instance_id,fingerprint,codex_version,codex_model) VALUES(?,?,?,?)",
-                                    (instance_id, fingerprint, codex_version, codex_model))
+                                    (instance_id, fingerprint, codex_version, codex_model or DEFAULT_MODEL))
                 elif (row["instance_id"], row["fingerprint"]) != (instance_id, fingerprint):
                     raise IntegrityConflict("instance/configuration changed; explicit state migration required")
                 else:
                     # The build and the model can change under one instance:
                     # each move is audited, never refused. The caller passes
                     # only a reviewed build (Config.validate).
-                    for column, value in (("codex_version", codex_version), ("codex_model", codex_model)):
+                    for column, value in (("codex_version", codex_version), ("codex_model", codex_model or DEFAULT_MODEL)):
                         if row[column] != value:
                             self.db.execute(f"UPDATE instance SET {column}=?", (value,))
                             self.db.execute("INSERT INTO audit(event_id,ts,action,note) VALUES(NULL,?,?,?)",

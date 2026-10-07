@@ -53,6 +53,11 @@ approval_policy = "never"
 operator_instructions = "{config.operator_instructions}"
 ''')
     assert Config.load(path).lanes == config.lanes
+    path.write_text(path.read_text().replace('codex_model = "gpt-test"\n', ''))
+    assert Config.load(path).codex_model is None, "no model is Codex's own default"
+    path.write_text(path.read_text() + 'codex_model = ""\n')
+    with pytest.raises(ValueError, match='codex_model'):
+        Config.load(path)
 
 def test_peer_self_and_state_permissions(tmp_path):
     config = configured(tmp_path)

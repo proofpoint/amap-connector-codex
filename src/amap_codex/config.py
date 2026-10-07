@@ -30,7 +30,9 @@ class Config:
     launch_argv: list[str]
     lanes: list[Lane]
     state_dir: Path
-    codex_model: str
+    # None: the app-server's own default, as for an agent whose Codex
+    # configuration names no model.
+    codex_model: str | None
     cwd: str
     sandbox: str
     approval_policy: str
@@ -84,6 +86,7 @@ class Config:
             if doc.get(key) is not None:
                 doc[key] = Path(doc[key])
         doc.setdefault("self_address", None)
+        doc.setdefault("codex_model", None)
         try:
             config = cls(lanes=lanes, **doc)
         except TypeError as error:
@@ -123,8 +126,8 @@ class Config:
             raise ValueError("execution identities require launcher_control_argv")
         if not isinstance(self.cwd, str) or not Path(self.cwd).is_absolute():
             raise ValueError("cwd must be an explicit absolute sandbox path")
-        if not isinstance(self.codex_model, str) or not self.codex_model:
-            raise ValueError("codex_model is required")
+        if self.codex_model is not None and (not isinstance(self.codex_model, str) or not self.codex_model):
+            raise ValueError("codex_model must be a nonempty model name, or absent for Codex's default")
         for key in ("poll_interval_ms", "max_pending_events", "frame_limit_bytes"):
             value = getattr(self, key)
             if type(value) is not int or value <= 0:

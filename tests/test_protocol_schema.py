@@ -23,6 +23,16 @@ def test_generated_schema_manifest():
         assert hashlib.sha256((ROOT / "compatibility/schema" / name).read_bytes()).hexdigest() == expected
 
 
+def test_no_model_leaves_the_choice_to_codex():
+    """A configuration that names no model sends none, so the app-server uses
+    its own default, as the agent's pane does."""
+    delivery = AppServerDelivery(AppServerClient(["codex", "app-server"]), model=None, cwd="/work",
+                                sandbox="workspace-write", approval_policy="never", instructions="trusted")
+    assert "model" not in delivery.settings
+    jsonschema.validate(delivery.settings, schema("v2/ThreadStartParams"))
+    jsonschema.validate({**delivery.settings, "threadId": "thread-test"}, schema("v2/ThreadResumeParams"))
+
+
 def test_client_payloads_and_cancellation_responses_match_schema():
     delivery = AppServerDelivery(AppServerClient(["codex", "app-server"]), model="fixture", cwd="/work",
                                 sandbox="workspace-write", approval_policy="never", instructions="trusted")

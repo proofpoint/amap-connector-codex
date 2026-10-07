@@ -242,11 +242,13 @@ class AppServerClient:
 
 class AppServerDelivery:
     """One concrete adapter; acceptance and execution are separate evidence."""
-    def __init__(self, client: AppServerClient, *, model: str, cwd: str, sandbox: str,
+    def __init__(self, client: AppServerClient, *, model: str | None, cwd: str, sandbox: str,
                  approval_policy: str, instructions: str, mode: str = "tool_output", trusted_config=None):
         self.client = client
-        self.settings = {"model": model, "cwd": cwd, "sandbox": sandbox,
+        self.settings = {"cwd": cwd, "sandbox": sandbox,
                          "approvalPolicy": approval_policy, "developerInstructions": instructions}
+        if model is not None:
+            self.settings["model"] = model
         self.mode = mode
         self.trusted_config = trusted_config
         if trusted_config is not None:
