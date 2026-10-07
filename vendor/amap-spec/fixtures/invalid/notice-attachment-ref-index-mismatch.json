@@ -1,0 +1,19 @@
+{
+  "contract_version": "2",
+  "notice_id": "n-index-mismatch",
+  "ts": "2026-07-21T04:06:00Z",
+  "kind": "deliver",
+  "message": {
+    "id": "46",
+    "from": "colleague@example.com",
+    "subject": "wrong content_ref",
+    "preview": "descriptor points at another notice's sidecar",
+    "mailbox": "inbox",
+    "attachments": [
+      { "filename": "photo.jpg", "media_type": "image/jpeg",
+        "size_bytes": 204800,
+        "disposition": "clean",
+        "content_ref": "OTHER-NOTICE.attachments/7" }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "contract_version": "2",
+  "notice_id": "n-bad-disposition",
+  "ts": "t",
+  "kind": "deliver",
+  "message": {
+    "id": "1", "from": "a@b", "subject": "s", "preview": "p", "mailbox": "inbox",
+    "attachments": [
+      { "filename": "x.pdf", "media_type": "application/pdf", "size_bytes": 1,
+        "disposition": "malware" }
+    ]
+  }
+}

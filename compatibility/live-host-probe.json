@@ -1,0 +1,15 @@
+{
+  "scope": "host protocol/MCP only; no isolated launcher or real router",
+  "model": "gpt-6.1-sol",
+  "configuration_sha256": "4263f3a5078b7eb1d0f323e83a1eabefbf670815ebbacbfd193af76deb0630d4",
+  "user_agent": "amap_connector/0.160.1 (Debian 13.0.0; aarch64) tmux-256color (amap_connector; 0.1.0)",
+  "thread_id": "01a11247-8fe7-7cb2-bb90-93d491138fea",
+  "delivery": "accepted",
+  "turn_status": "completed",
+  "read_message_called": true,
+  "marker_returned": true,
+  "original_input_inspectable": true,
+  "blocked_requests": [],
+  "resume_original_input_inspectable": true,
+  "instructions_on_start_and_resume": "same supported developerInstructions override sent; resumed inference not tested"
+}

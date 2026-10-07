@@ -1,0 +1,14 @@
+{
+  "contract_version": "2",
+  "req_id": "00000002",
+  "agent_id": "agent.research",
+  "ts": "2026-07-20T04:10:00Z",
+  "in_reply_to": "notice-1721457600000000001-4242",
+  "draft": {
+    "to": ["colleague@example.com"],
+    "cc": [],
+    "subject": "Re: status?",
+    "body_text": "Done — details attached.",
+    "reply_to_message_id": "<43@example.com>"
+  }
+}

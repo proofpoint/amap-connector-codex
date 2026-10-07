@@ -1,0 +1,14 @@
+{
+  "contract_version": "2",
+  "notice_id": "1721457600000000000-4242",
+  "ts": "2026-07-20T04:00:00Z",
+  "kind": "deliver",
+  "message": {
+    "id": "42",
+    "from": "Alex Doe <owner@example.com>",
+    "subject": "status?",
+    "preview": "hey, how's the run going",
+    "mailbox": "inbox",
+    "provenance": "unknown"
+  }
+}

@@ -1,0 +1,2 @@
+{ "contract_version": "2", "notice_id": "9f1c2b7e4d3a4f60b8e2c1d5a7f39e04", "ts": "t", "kind": "deliver",
+  "message": { "id": "9f1c2b7e4d3a4f60b8e2c1d5a7f39e04", "from": "planner@fleet.example", "subject": "s", "preview": "p", "mailbox": "peer" } }

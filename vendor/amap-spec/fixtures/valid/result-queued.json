@@ -1,0 +1,11 @@
+{
+  "contract_version": "2",
+  "req_id": "00000003",
+  "outcome": "queued_for_human",
+  "detail": "not in allowlist: stranger@example.com",
+  "reason_code": "recipient_not_allowlisted",
+  "ts": "2026-07-20T04:07:00Z",
+  "recipients": ["stranger@example.com"],
+  "message_id": null,
+  "job_id": null
+}

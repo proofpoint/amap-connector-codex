@@ -1,0 +1,6 @@
+{
+  "router": "amap.router@fleet.example",
+  "written_at": "2026-09-18T12:00:00Z",
+  "delegate_to": [],
+  "mail_to": []
+}

@@ -1,0 +1,21 @@
+{
+  "contract_version": "2",
+  "notice_id": "7b2a1c0d9e8f47a6b5c4d3e2f1a0b9c8",
+  "ts": "2026-09-03T12:05:00Z",
+  "kind": "peer",
+  "message": {
+    "id": "7b2a1c0d9e8f47a6b5c4d3e2f1a0b9c8",
+    "from": "triage@fleet.example",
+    "subject": "Customer asks for an export",
+    "preview": "A customer mail this morning asks whether",
+    "mailbox": "peer",
+    "sender_exposure": {
+      "asserted_by": "amap.router@fleet.example",
+      "external_mail_delivered": true,
+      "window_start": "2026-09-02T12:05:00Z",
+      "window_end": "2026-09-03T12:05:00Z",
+      "last_external_delivery_ts": "2026-09-03T08:41:10Z",
+      "derived_from": ["1721457600000000001-4242"]
+    }
+  }
+}

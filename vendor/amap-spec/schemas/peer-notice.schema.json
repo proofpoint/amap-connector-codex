@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amap-spec/schemas/peer-notice.schema.json",
+  "title": "peer-notice",
+  "description": "runtime -> connector: one notice per peer message placed in <agent-id>/peer/notices/. amap-spec v3.1.0 DRAFT, peer-origin profile (spec/peer-origin.md). Same layout as deliver-notice with kind and mailbox pinned to \"peer\", message.from pinned to a bare addr-spec (the one runtime-asserted `from` in the protocol), message.id / in_reply_to / references pinned to the notice_id charset (the peer message id is bare on the wire; its Message-ID encoding exists only inside a mail header, never in an AMAP document), plus the optional runtime-asserted message.sender_exposure. Runtime-authored: envelope OPEN at every level per contract.md §7 — a consumer MUST ignore members it does not recognize. A document with kind \"peer\" found under inbound/notices/ fails deliver-notice.schema.json; a document with kind \"deliver\" found under peer/notices/ fails this schema: both are dropped under §5's drop rule (the profile's second lock).",
+  "type": "object",
+  "required": ["contract_version", "notice_id", "ts", "kind", "message"],
+  "properties": {
+    "contract_version": { "const": "2" },
+    "notice_id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(?!\\n)$" },
+    "ts": { "type": "string", "minLength": 1 },
+    "kind": { "const": "peer" },
+    "message": {
+      "type": "object",
+      "required": ["id", "from", "subject", "preview", "mailbox"],
+      "properties": {
+        "id": {
+          "type": "string", "minLength": 1,
+          "description": "the peer message id: minted by the sending runtime on accepting the submit, returned to the sender as result.message_id, >=128 bits of entropy, globally unique and unguessable. Bare on the wire under the notice_id charset; when carried in a mail header it is encoded as <id@domain> and decoded again before it enters any AMAP document.",
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(?!\\n)$"
+        },
+        "from": {
+          "type": "string", "minLength": 1,
+          "description": "bare addr-spec, runtime-asserted from the restricted write path or the verified cross-host statement, never copied from sender text. The one `from` in the protocol a consumer may treat as authenticated origin.",
+          "pattern": "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9.-]+(?!\\n)$"
+        },
+        "subject": { "type": "string" },
+        "preview": { "type": "string" },
+        "mailbox": { "const": "peer" },
+        "task_id": { "type": "string", "minLength": 1 },
+        "thread_id": { "type": "string" },
+        "in_reply_to": {
+          "type": "string", "minLength": 1,
+          "description": "present iff the placing runtime resolved it from its own ledger (a peer message id it issued or placed). REQUIRED on a result by prose; a fresh task omits it. Bare peer id, never the Message-ID-encoded form.",
+          "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(?!\\n)$"
+        },
+        "references": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(?!\\n)$" }
+        },
+        "sender_standing": {
+          "type": "string",
+          "description": "advisory, open vocabulary; SHOULD be `agent-tier` when set on a peer notice."
+        },
+        "provenance": {
+          "type": "string",
+          "description": "advisory, open vocabulary; redundant with the tree on a peer notice and MAY be omitted. Never grounds to derive or override origin class."
+        },
+        "verdict": {
+          "type": "object",
+          "properties": {
+            "auth": { "type": "string" },
+            "screen": { "type": "string" },
+            "entitlement": { "type": "string" }
+          }
+        },
+        "sender_exposure": {
+          "type": "object",
+          "description": "runtime-asserted, never sender-settable (a submit-request carrying it is `rejected` by the closed envelope; cross-host it is taken only from the verified statement). Absence means NOT ASSESSED, never `no exposure`. MUST NOT drive routing or treatment.",
+          "required": ["asserted_by", "external_mail_delivered", "window_start", "window_end"],
+          "properties": {
+            "asserted_by": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9.-]+(?!\\n)$" },
+            "external_mail_delivered": { "type": "boolean" },
+            "window_start": { "type": "string", "minLength": 1 },
+            "window_end": { "type": "string", "minLength": 1 },
+            "last_external_delivery_ts": { "type": "string", "minLength": 1 },
+            "derived_from": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(?!\\n)$" }
+            }
+          },
+          "if": { "required": ["external_mail_delivered"], "properties": { "external_mail_delivered": { "const": true } } },
+          "then": { "required": ["last_external_delivery_ts"] }
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["filename", "media_type", "size_bytes", "disposition"],
+            "properties": {
+              "filename":    { "type": "string", "minLength": 1 },
+              "media_type":  { "type": "string", "minLength": 1 },
+              "size_bytes":  { "type": "integer", "minimum": 0 },
+              "sha256":      { "type": "string", "pattern": "^[a-f0-9]{64}(?!\\n)$" },
+              "disposition": { "type": "string",
+                               "enum": ["clean", "stripped", "quarantined", "unscanned"] },
+              "content_ref": { "type": "string",
+                               "pattern": "^[A-Za-z0-9_.-]+\\.attachments/(0|[1-9][0-9]*)(?!\\n)$" }
+            },
+            "allOf": [
+              { "if": { "required": ["content_ref"] },
+                "then": { "properties": { "disposition": { "const": "clean" } } } },
+              { "if": { "required": ["sha256"] },
+                "then": { "properties": { "disposition": { "const": "clean" } } } }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "contract_version": "2",
+  "notice_id": "5e4d3c2b1a0f4e9d8c7b6a5f4e3d2c1b",
+  "ts": "2026-09-03T12:10:00Z",
+  "kind": "peer",
+  "message": {
+    "id": "5e4d3c2b1a0f4e9d8c7b6a5f4e3d2c1b",
+    "from": "planner@fleet.example",
+    "subject": "Review this diagram",
+    "preview": "Attached; comments by end of day.",
+    "mailbox": "peer",
+    "attachments": [
+      { "filename": "diagram.png", "media_type": "image/png",
+        "size_bytes": 40960,
+        "sha256": "04c22051bc3f76bc44b952d9fdd3e59214662e7b3fd8a84b89de09352aeb2264",
+        "disposition": "clean",
+        "content_ref": "5e4d3c2b1a0f4e9d8c7b6a5f4e3d2c1b.attachments/0" }
+    ]
+  }
+}

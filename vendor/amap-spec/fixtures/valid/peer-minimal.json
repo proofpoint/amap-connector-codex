@@ -1,0 +1,13 @@
+{
+  "contract_version": "2",
+  "notice_id": "9f1c2b7e4d3a4f60b8e2c1d5a7f39e04",
+  "ts": "2026-09-03T10:00:00Z",
+  "kind": "peer",
+  "message": {
+    "id": "9f1c2b7e4d3a4f60b8e2c1d5a7f39e04",
+    "from": "planner@fleet.example",
+    "subject": "Summarise the Q3 review thread",
+    "preview": "Please read the attached thread summary and",
+    "mailbox": "peer"
+  }
+}

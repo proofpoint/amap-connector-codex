@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amap-spec/schemas/directory.schema.json",
+  "title": "directory",
+  "description": "runtime -> connector: the router's most recent word about which peers this agent may address, published per instance at <agent-id>/directory.json. amap-spec v3.1.0 DRAFT (spec/contract.md §10). ADVISORY, NEVER AUTHORITATIVE: an address's presence is not a prediction that a submit to it will be accepted, nor its absence a prediction of refusal — authorisation is evaluated by the runtime at submit time and only the result (§4) reports what happened. A runtime MUST NOT read this file back as authorisation; enforcement stays the runtime's own graph check on every message. The file MAY be absent. Runtime-authored: envelope is OPEN at every level per §7's v3.0.0 tolerance rule — a consumer MUST ignore members it does not recognize; emitting an unrecognized member remains producer non-conformance.",
+  "type": "object",
+  "required": [
+    "router",
+    "written_at",
+    "delegate_to",
+    "mail_to"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "2"
+    },
+    "router": {
+      "type": "string",
+      "description": "the publishing runtime's own address, one bare addr-spec. Never appears in delegate_to or mail_to.",
+      "pattern": "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9.-]+(?!\\n)$"
+    },
+    "written_at": {
+      "type": "string",
+      "minLength": 1,
+      "description": "RFC 3339, the publishing runtime's clock. The only staleness signal a consumer gets; an honest marker, not a freshness guarantee.",
+      "pattern": "^[^\\u0000-\\u001f\\u007f]*(?!\\n)$"
+    },
+    "delegate_to": {
+      "type": "array",
+      "description": "sorted addresses this agent may task — the authorisation graph transposed for this instance. Always present; empty when the lane is closed. Never this agent's own address, and never who may task THIS agent (an allowlist, withheld by construction).",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9.-]+(?!\\n)$"
+      }
+    },
+    "mail_to": {
+      "type": "array",
+      "description": "sorted addresses on the mutual mail lane. Always present; empty when the lane is closed, which is the normal case for a delegation-only deployment.",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9.-]+(?!\\n)$"
+      }
+    }
+  }
+}

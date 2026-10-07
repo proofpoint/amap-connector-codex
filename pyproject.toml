@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amap-connector-codex"
+version = "0.1.0"
+description = "Codex connector reference implementation for the AMAP filesystem contract"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8", "jsonschema>=4"]
+
+[project.scripts]
+amap-codex = "amap_codex.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+script-files = ["bin/inbox-mcp-vol", "bin/inbox-submit"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

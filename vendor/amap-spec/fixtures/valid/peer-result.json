@@ -1,0 +1,16 @@
+{
+  "contract_version": "2",
+  "notice_id": "0a6d5e2f9b8c47d1a3e4f5061728394a",
+  "ts": "2026-09-03T11:30:00Z",
+  "kind": "peer",
+  "message": {
+    "id": "0a6d5e2f9b8c47d1a3e4f5061728394a",
+    "from": "analyst@fleet.example",
+    "subject": "Re: Summarise the Q3 review thread",
+    "preview": "Done. Three findings, one open question:",
+    "mailbox": "peer",
+    "in_reply_to": "9f1c2b7e4d3a4f60b8e2c1d5a7f39e04",
+    "references": ["9f1c2b7e4d3a4f60b8e2c1d5a7f39e04"],
+    "sender_standing": "agent-tier"
+  }
+}

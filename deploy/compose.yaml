@@ -1,0 +1,72 @@
+# One-off Codex app-server container, launched by launch-app-server.sh.
+# Every host source is mandatory. Supply them in the deployment-owned
+# deploy/.env or exported environment; do not commit that file. Required
+# sources are documented in README.md. No Docker socket is mounted here.
+services:
+  agent:
+    image: ${AMAP_CODEX_IMAGE:?Set an image containing codex-cli 0.160.1 and Python 3.11+}
+    user: ${AMAP_AGENT_UID:?Set the isolated agent uid}:${AMAP_AGENT_GID:?Set the isolated agent gid}
+    init: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    read_only: true
+    working_dir: /work
+    environment:
+      CODEX_HOME: /codex-home
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m
+    volumes:
+      - type: bind
+        source: ${AMAP_CONNECTOR_ROOT:?Set connector deployment root}/bin
+        target: /opt/amap-connector-codex/bin
+        read_only: true
+      - type: volume
+        source: codex_home
+        target: /codex-home
+      - type: bind
+        source: ${AMAP_CODEX_CONFIG:?Set isolated Codex config file}
+        target: /codex-home/config.toml
+        read_only: true
+      - type: bind
+        source: ${AMAP_OPERATOR_INSTRUCTIONS:?Set deployed operator instructions}
+        target: /etc/amap-connector/operator-instructions.md
+        read_only: true
+      - type: bind
+        source: ${AMAP_AGENT_WORKDIR:?Set separate writable agent work directory}
+        target: /work
+      - type: bind
+        source: ${AMAP_MAIL_NOTICE_DIR:?Set mail notice directory}
+        target: /amap/inbound/notices
+        read_only: true
+      - type: bind
+        source: ${AMAP_MAIL_MESSAGE_DIR:?Set mail message directory}
+        target: /amap/inbound/messages
+        read_only: true
+      - type: bind
+        source: ${AMAP_PEER_NOTICE_DIR:?Set peer notice directory}
+        target: /amap/peer/notices
+        read_only: true
+      - type: bind
+        source: ${AMAP_PEER_MESSAGE_DIR:?Set peer message directory}
+        target: /amap/peer/messages
+        read_only: true
+      - type: bind
+        source: ${AMAP_OUTBOUND_DROPBOX:?Set outbound drop box}
+        target: /amap/outbound/dropbox
+      - type: bind
+        source: ${AMAP_OUTBOUND_DROPBOX:?Set outbound drop box}/processed
+        target: /amap/outbound/dropbox/processed
+        read_only: true
+      - type: bind
+        source: ${AMAP_OUTBOUND_DROPBOX:?Set outbound drop box}/results
+        target: /amap/outbound/dropbox/results
+        read_only: true
+      - type: bind
+        source: ${AMAP_ROSTER_DIR:?Set runtime roster directory}
+        target: /amap/roster
+        read_only: true
+    command: ["sleep", "infinity"]
+
+volumes:
+  codex_home:

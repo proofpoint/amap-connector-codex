@@ -1,0 +1,14 @@
+{
+  "contract_version": "2",
+  "notice_id": "1721457600000000000-4242",
+  "id": "42",
+  "date": "Mon, 20 Jul 2026 04:00:00 +0000",
+  "from": "Alex Doe <owner@example.com>",
+  "to": "agent@example.org",
+  "subject": "status?",
+  "body_text": "hey, how's the run going",
+  "attachments": [
+    { "filename": "report.pdf", "media_type": "application/pdf",
+      "size_bytes": 48213, "disposition": "unscanned" }
+  ]
+}

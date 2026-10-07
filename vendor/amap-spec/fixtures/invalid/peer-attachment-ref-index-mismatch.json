@@ -1,0 +1,5 @@
+{ "contract_version": "2", "notice_id": "5e4d3c2b1a0f4e9d8c7b6a5f4e3d2c1b", "ts": "t", "kind": "peer",
+  "message": { "id": "5e4d3c2b1a0f4e9d8c7b6a5f4e3d2c1b", "from": "planner@fleet.example", "subject": "s", "preview": "p", "mailbox": "peer",
+    "attachments": [
+      { "filename": "a.png", "media_type": "image/png", "size_bytes": 1, "disposition": "clean",
+        "content_ref": "5e4d3c2b1a0f4e9d8c7b6a5f4e3d2c1b.attachments/1" } ] } }

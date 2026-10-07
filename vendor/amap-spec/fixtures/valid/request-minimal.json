@@ -1,0 +1,9 @@
+{
+  "contract_version": "2",
+  "req_id": "00000001",
+  "draft": {
+    "to": ["owner@example.com"],
+    "subject": "Re: status?",
+    "body_text": "Run is green; the integration tests passed."
+  }
+}

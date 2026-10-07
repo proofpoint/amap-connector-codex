@@ -1,0 +1,33 @@
+{
+  "canonical_repository": "proofpoint/amap-connector-codex",
+  "publication": "pending repository creation",
+  "sha256": {
+    "src/amap_codex/__init__.py": "0777fc1916f176bf5d1ad3857e8366715575c1e4f4c2ee233d9595230e5bdd2a",
+    "src/amap_codex/app_server.py": "104f8ebaf4ad61e9acbddad70650929c47de4b185e64b49a9bc01aa9930c52c6",
+    "src/amap_codex/claims.py": "d87723bbca68e14dcf3c78c3380379c2cf4bc954bb1b48931a47d10604b2b8c2",
+    "src/amap_codex/cli.py": "553276643c3c09fdf0405d80f3db0c4b6d28f3287b0c9ee7d01f867723969973",
+    "src/amap_codex/config.py": "d81536e0cb5c020013985835f376bf75a1c6a57a8defddb57eb7aff368e1af56",
+    "src/amap_codex/guard_command.py": "80b4baedfd0cfc847de553e27aa96e1d6e3500be426dbee5091a1705d5e20a12",
+    "src/amap_codex/host_guard.py": "3f406a3ba24c663a2dbcabc9ba5b01e7fbba3eb95c1642fb84fbc734280fea27",
+    "src/amap_codex/journal.py": "37d98c3843a3eb5725263c53958c2312a7385800902e511233e3c6785548a150",
+    "src/amap_codex/lifecycle.py": "9fd3f71107882ba70a07c79d67f7edaa3e063becc31c60943107a6fdc55e8d0c",
+    "src/amap_codex/operator.py": "2ecfa5e2ad438cb872c883630fd70db0126a2a44c8391a7b725e9849b10e9ab1",
+    "src/amap_codex/outcomes.py": "fac6b52ff995cd8e4f1313200f343f6de6b09af4eccf7b73c544928ae7b24e2e",
+    "src/amap_codex/spool.py": "d7d1f34638aa463a708a776c59d1cb3084a4cb14c2137adab74f9381abdb5652",
+    "src/amap_codex/supervisor.py": "c6bc109f02e25e2ddcdab59af0847fbb234f628c4c7381505c8a037045d6f2e4",
+    "bin/_inboxlib.py": "5c5ccf7deb76ae220e67e6712c512d1c14d3ba3b2dd7bac85059cb0e49904ca0",
+    "bin/inbox-mcp-vol": "f40d4743de042530b0b4cf2c20c7fe68a84d3e9c12a460ccc17c7e4dd57b91cb",
+    "bin/inbox-submit": "75b200f635a24d7b24137b2c2f5b9df7e271bc15fc1b54c0cc134a55fc9f7beb",
+    "pyproject.toml": "7b979ed650876a17bf77d9e52273b05c859a4be61c03ac11e8399613226706a7",
+    "config/codex.example.toml": "27779d1e866b851a9dbb99dfbdf6a5eb7753f27cead73c8a99a69c4574e321d6",
+    "config/connector.example.toml": "4d5f8379af3ea062b6ca36853bb27f4513cb930c0183a34994e2078d9ac3011a",
+    "config/operator-instructions.md": "441bb1e4f49743f085e377bd8553081b920055c4e9a83b37b29ffc57d2e82a92",
+    "docs/contracts/LAUNCHER-CONTROL.md": "c96b9a829861e4856cdae17942578c8e37cdf51bdec84a827cb97e294800767a",
+    "docs/contracts/launcher-control-request.schema.json": "f5d4dc61192e6aa80b04b64366c4ee39ace86f621b0a7377189e463d9e715fbd",
+    "docs/contracts/launcher-control-response.schema.json": "592168e5b86c3e3c2f75da90e1a7eca9b91b0a6b8307e5bbda36c2ff415ec73d"
+  },
+  "wheel": {
+    "path": "dist/amap_connector_codex-0.1.0-py3-none-any.whl",
+    "sha256": "f1defa65e66d02d511fbccba436c59acb33078a66908c4fc9cfed7323ddd4c43"
+  }
+}

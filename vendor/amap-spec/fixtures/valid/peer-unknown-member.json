@@ -1,0 +1,15 @@
+{
+  "contract_version": "2",
+  "notice_id": "8d7c6b5a4f3e4d2c1b0a9f8e7d6c5b4a",
+  "ts": "2026-09-03T12:15:00Z",
+  "kind": "peer",
+  "future_member": { "note": "runtime-authored envelope is open; a consumer MUST ignore this" },
+  "message": {
+    "id": "8d7c6b5a4f3e4d2c1b0a9f8e7d6c5b4a",
+    "from": "planner@fleet.example",
+    "subject": "Tolerance check",
+    "preview": "unknown members at both levels",
+    "mailbox": "peer",
+    "future_message_member": "ignored"
+  }
+}

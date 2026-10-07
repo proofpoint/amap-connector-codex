@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amap-spec/schemas/inbound-message.schema.json",
+  "title": "inbound-message",
+  "description": "runtime -> connector: the full delivered message (incl. body_text), spooled at inbound/messages/notice-<id>.json, keyed on the runtime-minted notice-id (never the provider message.id). amap-spec v3.0.0 (spec/contract.md §5). Runtime-authored: this document's envelope is OPEN (no additionalProperties:false) at every level per §7's v3.0.0 tolerance rule — a consumer MUST ignore members it does not recognize; emitting an unrecognized member remains producer non-conformance.",
+  "type": "object",
+  "required": ["contract_version", "notice_id", "body_text"],
+  "properties": {
+    "contract_version": { "const": "2" },
+    "notice_id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(?!\\n)$" },
+    "body_text": { "type": "string" },
+    "id": { "type": "string" },
+    "date": { "type": "string" },
+    "from": { "type": "string" },
+    "to": { "type": "string" },
+    "cc": { "type": "string" },
+    "subject": { "type": "string" },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["filename", "media_type", "size_bytes", "disposition"],
+        "properties": {
+          "filename":    { "type": "string", "minLength": 1 },
+          "media_type":  { "type": "string", "minLength": 1 },
+          "size_bytes":  { "type": "integer", "minimum": 0 },
+          "sha256":      { "type": "string", "pattern": "^[a-f0-9]{64}(?!\\n)$" },
+          "disposition": { "type": "string",
+                           "enum": ["clean", "stripped", "quarantined", "unscanned"] },
+          "content_ref": { "type": "string",
+                           "pattern": "^[A-Za-z0-9_.-]+\\.attachments/(0|[1-9][0-9]*)(?!\\n)$" }
+        },
+        "allOf": [
+          { "if": { "required": ["content_ref"] },
+            "then": { "properties": { "disposition": { "const": "clean" } } } },
+          { "if": { "required": ["sha256"] },
+            "then": { "properties": { "disposition": { "const": "clean" } } } }
+        ]
+      }
+    }
+  }
+}

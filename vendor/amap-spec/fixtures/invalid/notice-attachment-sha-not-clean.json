@@ -1,0 +1,14 @@
+{
+  "contract_version": "2",
+  "notice_id": "n-sha-not-clean",
+  "ts": "t",
+  "kind": "deliver",
+  "message": {
+    "id": "1", "from": "a@b", "subject": "s", "preview": "p", "mailbox": "inbox",
+    "attachments": [
+      { "filename": "x.pdf", "media_type": "application/pdf", "size_bytes": 1,
+        "disposition": "unscanned",
+        "sha256": "ff627b64cde51c626e023b78a77ae8ff7803e5f74bb248944db4bb3576c6a729" }
+    ]
+  }
+}

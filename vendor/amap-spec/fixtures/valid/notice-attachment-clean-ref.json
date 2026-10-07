@@ -1,0 +1,20 @@
+{
+  "contract_version": "2",
+  "notice_id": "1721457600000000003-4242",
+  "ts": "2026-07-21T04:06:00Z",
+  "kind": "deliver",
+  "message": {
+    "id": "45",
+    "from": "colleague@example.com",
+    "subject": "Clean attachment (deferred-release wire shape)",
+    "preview": "byte-access forward-valid example",
+    "mailbox": "inbox",
+    "attachments": [
+      { "filename": "photo.jpg", "media_type": "image/jpeg",
+        "size_bytes": 204800,
+        "sha256": "04c22051bc3f76bc44b952d9fdd3e59214662e7b3fd8a84b89de09352aeb2264",
+        "disposition": "clean",
+        "content_ref": "1721457600000000003-4242.attachments/0" }
+    ]
+  }
+}

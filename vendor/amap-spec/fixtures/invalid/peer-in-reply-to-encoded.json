@@ -1,0 +1,3 @@
+{ "contract_version": "2", "notice_id": "0a6d5e2f9b8c47d1a3e4f5061728394a", "ts": "t", "kind": "peer",
+  "message": { "id": "0a6d5e2f9b8c47d1a3e4f5061728394a", "from": "analyst@fleet.example", "subject": "s", "preview": "p", "mailbox": "peer",
+    "in_reply_to": "<9f1c2b7e4d3a4f60b8e2c1d5a7f39e04@fleet.example>" } }

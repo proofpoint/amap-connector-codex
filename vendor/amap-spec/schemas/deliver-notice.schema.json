@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amap-spec/schemas/deliver-notice.schema.json",
+  "title": "deliver-notice",
+  "description": "runtime -> connector: one notice per delivered message. amap-spec v3.0.0 (spec/contract.md §5). Runtime-authored: this document's envelope is OPEN (no additionalProperties:false) at every level per §7's v3.0.0 tolerance rule — a consumer MUST ignore members it does not recognize; emitting an unrecognized member remains producer non-conformance.",
+  "type": "object",
+  "required": ["contract_version", "notice_id", "ts", "kind", "message"],
+  "properties": {
+    "contract_version": { "const": "2" },
+    "notice_id": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(?!\\n)$" },
+    "ts": { "type": "string", "minLength": 1 },
+    "kind": { "const": "deliver" },
+    "message": {
+      "type": "object",
+      "required": ["id", "from", "subject", "preview", "mailbox"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "from": { "type": "string", "minLength": 1 },
+        "subject": { "type": "string" },
+        "preview": { "type": "string" },
+        "mailbox": { "type": "string", "minLength": 1 },
+        "task_id": { "type": "string", "minLength": 1 },
+        "thread_id": { "type": "string" },
+        "in_reply_to": { "type": "string" },
+        "references": { "type": "array", "items": { "type": "string" } },
+        "sender_standing": {
+          "type": "string",
+          "description": "advisory, open vocabulary (known, agent-tier, first-contact, read-only, ...). A consumer MUST tolerate a value outside this list, treating it as opaque — never grounds to drop the notice; a runtime may add a value as a MINOR change (v3.0.0, contract.md §5/§7)."
+        },
+        "provenance": {
+          "type": "string",
+          "description": "advisory, open vocabulary (external, internal, ...). A consumer MUST tolerate a value outside this list, treating it as opaque — never grounds to drop the notice; a runtime may add a value as a MINOR change (v3.0.0, contract.md §5/§7)."
+        },
+        "verdict": {
+          "type": "object",
+          "properties": {
+            "auth": { "type": "string" },
+            "screen": { "type": "string" },
+            "entitlement": { "type": "string" }
+          }
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["filename", "media_type", "size_bytes", "disposition"],
+            "properties": {
+              "filename":    { "type": "string", "minLength": 1 },
+              "media_type":  { "type": "string", "minLength": 1 },
+              "size_bytes":  { "type": "integer", "minimum": 0 },
+              "sha256":      { "type": "string", "pattern": "^[a-f0-9]{64}(?!\\n)$" },
+              "disposition": { "type": "string",
+                               "enum": ["clean", "stripped", "quarantined", "unscanned"] },
+              "content_ref": { "type": "string",
+                               "pattern": "^[A-Za-z0-9_.-]+\\.attachments/(0|[1-9][0-9]*)(?!\\n)$" }
+            },
+            "allOf": [
+              { "if": { "required": ["content_ref"] },
+                "then": { "properties": { "disposition": { "const": "clean" } } } },
+              { "if": { "required": ["sha256"] },
+                "then": { "properties": { "disposition": { "const": "clean" } } } }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

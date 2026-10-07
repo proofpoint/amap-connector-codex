@@ -1,0 +1,20 @@
+{
+  "contract_version": "2",
+  "notice_id": "1721457600000000001-4242",
+  "ts": "2026-07-20T04:05:00Z",
+  "kind": "deliver",
+  "message": {
+    "id": "43",
+    "from": "colleague@example.com",
+    "subject": "Re: status?",
+    "preview": "thanks — one more thing",
+    "mailbox": "inbox",
+    "task_id": "t-9f8c1a2b3d4e5f60",
+    "thread_id": "thr-abc123",
+    "in_reply_to": "<00000001@relay.example.com>",
+    "references": ["<root@example.com>", "<00000001@relay.example.com>"],
+    "sender_standing": "known",
+    "provenance": "external",
+    "verdict": { "auth": "dmarc-pass", "screen": "clean", "entitlement": "roster" }
+  }
+}

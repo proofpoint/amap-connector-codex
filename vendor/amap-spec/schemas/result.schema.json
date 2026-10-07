@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amap-spec/schemas/result.schema.json",
+  "title": "result",
+  "description": "runtime -> agent: verdict for a submit-request. amap-spec v3.0.0 (spec/contract.md §4). Runtime-authored: this document's envelope is OPEN (no additionalProperties:false) at every level per §7's v3.0.0 tolerance rule — a consumer MUST ignore members it does not recognize; emitting an unrecognized member remains producer non-conformance.",
+  "type": "object",
+  "required": ["contract_version", "req_id", "outcome"],
+  "properties": {
+    "contract_version": { "const": "2" },
+    "req_id": { "type": "string", "minLength": 1 },
+    "outcome": {
+      "type": "string",
+      "enum": ["accepted", "queued_for_human", "rejected"]
+    },
+    "detail": { "type": ["string", "null"] },
+    "reason_code": { "type": "string", "minLength": 1 },
+    "ts": { "type": "string", "minLength": 1 },
+    "recipients": { "type": "array", "items": { "type": "string" } },
+    "message_id": { "type": ["string", "null"] },
+    "job_id": { "type": ["string", "null"] },
+    "attestation": {
+      "type": "object",
+      "required": ["form"],
+      "properties": {
+        "form":   { "type": "string", "enum": ["self-stamp", "verifiable"] },
+        "token":  { "type": "string", "minLength": 1 },
+        "claims": { "type": "object" }
+      }
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["index", "outcome"],
+        "properties": {
+          "index":   { "type": "integer", "minimum": 0 },
+          "outcome": { "type": "string",
+                       "enum": ["accepted", "dlp_held", "rejected_type", "too_large"] },
+          "detail":  { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

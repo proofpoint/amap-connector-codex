@@ -1,0 +1,46 @@
+# Install as the isolated agent's $CODEX_HOME/config.toml.
+# This file is mounted read-only by the deployment example. The connector's
+# operator instructions are supplied through app-server thread start/resume,
+# not through an invented Codex config key.
+
+model = "REPLACE_WITH_MODEL_AVAILABLE_TO_THE_CODEX_ACCOUNT"
+sandbox_mode = "workspace-write"
+approval_policy = "never"
+
+[sandbox_workspace_write]
+writable_roots = ["/work"]
+network_access = false
+exclude_slash_tmp = true
+exclude_tmpdir_env_var = true
+
+[mcp_servers.inbox]
+command = "/opt/amap-connector-codex/bin/inbox-mcp-vol"
+required = true
+enabled_tools = ["list_messages", "read_message", "read_attachment"]
+default_tools_approval_mode = "approve"
+
+[mcp_servers.inbox.env]
+INBOX_MESSAGE_DIR = "/amap/inbound/messages"
+INBOX_LANE = "mail"
+
+[mcp_servers.delegation]
+command = "/opt/amap-connector-codex/bin/inbox-mcp-vol"
+required = true
+enabled_tools = ["list_messages", "read_message", "read_attachment"]
+default_tools_approval_mode = "approve"
+
+[mcp_servers.delegation.env]
+INBOX_MESSAGE_DIR = "/amap/peer/messages"
+INBOX_LANE = "peer"
+
+[mcp_servers.inbox_submit]
+command = "/opt/amap-connector-codex/bin/inbox-submit"
+args = ["mcp"]
+required = true
+enabled_tools = ["submit", "submit_result", "peers"]
+default_tools_approval_mode = "approve"
+
+[mcp_servers.inbox_submit.env]
+OUTBOX_DIR = "/amap/outbound/dropbox"
+AMAP_ROSTER_DIR = "/amap/roster"
+AMAP_SELF = "REPLACE_WITH_AGENT_ADDR_SPEC@example.invalid"

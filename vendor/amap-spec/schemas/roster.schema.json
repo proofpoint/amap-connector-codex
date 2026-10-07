@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amap-spec/schemas/roster.schema.json",
+  "title": "roster",
+  "description": "runtime -> every agent: the fleet roster, the runtime's most recent word about which instances it has admitted, written once for the whole fleet to a location the deployment designates and exposes read-only to each agent it points at the roster. amap-spec v3.1.0 DRAFT (the draft's section \"The Fleet Roster\"). EXISTENCE IS NOT AUTHORISATION: a member's presence says the instance exists, never that this agent may address it or that a submission to it will be accepted; authorisation is evaluated by the runtime at submit time and only the result reports what happened. NOT A SOURCE OF THE READER'S IDENTITY: the reader's own address may appear, and attribution stays the namespace a file arrived in. A runtime MUST NOT read this file back. The file MAY be absent; absent or stale means unknown, never an empty fleet. Runtime-authored: envelope is OPEN at every level — a consumer MUST ignore members it does not recognize; emitting an unrecognized member remains producer non-conformance.",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "router",
+    "written_at",
+    "members"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "2"
+    },
+    "router": {
+      "type": "string",
+      "description": "the publishing runtime's own address, one bare addr-spec. Never appears in members.",
+      "pattern": "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9.-]+(?!\\n)$"
+    },
+    "written_at": {
+      "type": "string",
+      "minLength": 1,
+      "description": "RFC 3339, the publishing runtime's clock. The only staleness signal a consumer gets; an honest marker, not a freshness guarantee.",
+      "pattern": "^[^\\u0000-\\u001f\\u007f]*(?!\\n)$"
+    },
+    "interval_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "OPTIONAL: the runtime's nominal rewrite interval in seconds, so a consumer can judge written_at against it. Omitted when the runtime does not know it."
+    },
+    "members": {
+      "type": "array",
+      "description": "the instances the runtime has admitted, sorted by address. Always present; never written as empty when membership is unknown (the previous file is left to age instead). The router is never a member.",
+      "items": {
+        "type": "object",
+        "required": [
+          "address",
+          "state"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "the member's address, one bare addr-spec.",
+            "pattern": "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9.-]+(?!\\n)$"
+          },
+          "state": {
+            "type": "string",
+            "minLength": 1,
+            "description": "OPEN advisory vocabulary; \"admitted\" is the only value defined at this version. A consumer MUST tolerate an unknown value as opaque.",
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*(?!\\n)$"
+          }
+        }
+      }
+    }
+  }
+}

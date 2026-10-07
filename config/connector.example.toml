@@ -1,0 +1,54 @@
+# Host-side supervisor configuration.
+# Replace every /REPLACE_* path with the actual deployment path before use.
+# The Config loader checks that directories and operator instructions exist.
+
+instance_id = "REPLACE_WITH_STABLE_INSTANCE_ID"
+self_address = "REPLACE_WITH_AGENT_ADDR_SPEC@example.invalid"
+
+# The host launcher starts a one-off Compose container and keeps it attached.
+# It stops that exact container when the supervisor closes the launcher pipes.
+launch_argv = [
+  "/REPLACE_WITH_CONNECTOR_ROOT/deploy/launch-app-server.sh",
+  "/REPLACE_WITH_CONNECTOR_ROOT/deploy/compose.yaml",
+  "amap-codex-REPLACE_WITH_STABLE_INSTANCE_NAME",
+]
+
+state_dir = "/REPLACE_WITH_PRIVATE_HOST_STATE_DIR"
+codex_model = "REPLACE_WITH_MODEL_AVAILABLE_TO_THE_CODEX_ACCOUNT"
+codex_version = "codex-cli 0.160.1"
+cwd = "/work"
+sandbox = "workspace-write"
+approval_policy = "never"
+operator_instructions = "/REPLACE_WITH_CONNECTOR_ROOT/config/operator-instructions.md"
+
+poll_interval_ms = 1000
+max_pending_events = 1000
+rpc_timeout_seconds = 30
+turn_watchdog_seconds = 900
+publication_grace_seconds = 30
+delivery_mode = "tool_output"
+outcome_idempotent_replay = false # Change only with verified router agreement.
+
+
+# Optional remote isolation adapter; omit these for direct local process groups.
+# launcher_control_argv = ["/absolute/adapter", "control"]
+# deployment_id = "pilot:one"
+# owner_domain = "host:operator-domain"
+# launcher_control_timeout_seconds = 10
+# trusted_config_file = "/absolute/protected/codex.toml"
+# operator_kickoff_enabled = true
+
+
+# Enable only after the router owner confirms this exact extension path and
+# outcome vocabulary. Do not infer support from another connector's setup.
+# outcome_dir = "/REPLACE_WITH_AGENT_ROOT/outbound/ext/codex/outcomes"
+
+[lanes.mail]
+notice_dir = "/REPLACE_WITH_AGENT_ROOT/inbound/notices"
+message_dir = "/REPLACE_WITH_AGENT_ROOT/inbound/messages"
+claim_path = "/REPLACE_WITH_EXISTING_CANONICAL_MAIL_CLAIM"
+
+[lanes.peer]
+notice_dir = "/REPLACE_WITH_AGENT_ROOT/peer/notices"
+message_dir = "/REPLACE_WITH_AGENT_ROOT/peer/messages"
+claim_path = "/REPLACE_WITH_EXISTING_CANONICAL_PEER_CLAIM"

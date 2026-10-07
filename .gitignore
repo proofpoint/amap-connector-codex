@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+build/
+dist/
+*.egg-info/
+.env
+
+# Local connector state and generated deployment secrets
+state/
+codex-home/
+deploy/.env
+
+# Separate integration repositories, published through their own PRs
+integration/repos/

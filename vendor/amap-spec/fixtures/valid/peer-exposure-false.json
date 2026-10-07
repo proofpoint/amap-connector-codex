@@ -1,0 +1,19 @@
+{
+  "contract_version": "2",
+  "notice_id": "3c9e8d7f6a5b4c3d2e1f0a9b8c7d6e5f",
+  "ts": "2026-09-03T12:00:00Z",
+  "kind": "peer",
+  "message": {
+    "id": "3c9e8d7f6a5b4c3d2e1f0a9b8c7d6e5f",
+    "from": "planner@fleet.example",
+    "subject": "Draft the release notes",
+    "preview": "Use the changelog in the shared volume;",
+    "mailbox": "peer",
+    "sender_exposure": {
+      "asserted_by": "amap.router@fleet.example",
+      "external_mail_delivered": false,
+      "window_start": "2026-09-02T12:00:00Z",
+      "window_end": "2026-09-03T12:00:00Z"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "req_id": "00000020",
+  "draft": {
+    "to": ["a@b"], "subject": "s", "body_text": "b"
+  }
+}
