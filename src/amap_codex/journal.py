@@ -72,7 +72,7 @@ class Journal:
                 else:
                     # The build and the model can change under one instance:
                     # each move is audited, never refused. The caller passes
-                    # only a reviewed build (Config.validate).
+                    # the build it launched (Config.validate, AppServerClient).
                     for column, value in (("codex_version", codex_version), ("codex_model", codex_model or DEFAULT_MODEL)):
                         if row[column] != value:
                             self.db.execute(f"UPDATE instance SET {column}=?", (value,))

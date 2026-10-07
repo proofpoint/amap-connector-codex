@@ -9,10 +9,11 @@ import platform
 import tempfile
 
 from amap_codex.app_server import AppServerClient, AppServerDelivery
-from amap_codex.config import SUPPORTED_CODEX
+import subprocess
 
 
 async def probe(binary, model, output):
+    build = subprocess.run([binary, '--version'], capture_output=True, text=True, check=True).stdout.split('\n')[0].strip()
     repo = Path(__file__).resolve().parents[2]
     with tempfile.TemporaryDirectory(prefix='amap-mcp-registry-') as directory:
         root = Path(directory)
@@ -33,7 +34,7 @@ async def probe(binary, model, output):
                 'AMAP_SELF': 'synthetic@example.invalid'}}
         config = {'mcp_servers': servers, 'model_reasoning_effort': 'low'}
         delivery = AppServerDelivery(AppServerClient([binary, 'app-server', '--listen', 'stdio://'],
-            expected_version=SUPPORTED_CODEX, env={**os.environ, 'CODEX_HOME': str(root / 'codex-home')}),
+            expected_version=build, env={**os.environ, 'CODEX_HOME': str(root / 'codex-home')}),
             model=model, cwd=str(root), sandbox='read-only', approval_policy='never',
             instructions='Synthetic startup only. No model turn or submission is authorized.', trusted_config=config)
         try:
@@ -41,7 +42,7 @@ async def probe(binary, model, output):
             assert thread
             evidence = {'scope': 'pinned host MCP startup only; no isolation/router attestation',
                 'timestamp_utc': datetime.now(timezone.utc).isoformat(), 'os': platform.system(),
-                'architecture': platform.machine(), 'expected_version': SUPPORTED_CODEX,
+                'architecture': platform.machine(), 'expected_version': build,
                 'user_agent': delivery.client.initialize_result.get('userAgent'),
                 'thread_created': True, 'exact_server_and_tool_registry': True,
                 'inference': False, 'submissions': 0}

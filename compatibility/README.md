@@ -9,11 +9,42 @@ The installed binary generated the committed protocol subset with
 [schema-manifest.json](schema-manifest.json) records hashes. The client enables
 the experimental API, completes `initialize` before `initialized`, and uses
 the generated `developerInstructions` field on both start and resume.
-The launcher's actual initialization user-agent version is checked before
-starting a thread. A deployment states which reviewed build it runs (`SUPPORTED_CODEX_VERSIONS` in
-`src/amap_codex/config.py`); any other is refused. A move between reviewed builds
-keeps the journal and its thread and is recorded in its audit table. Add a build
-only after re-running these probes against it.
+The launcher's actual initialization user-agent version is checked against
+the build the deployment states before starting a thread.
+
+**Reviewed builds are information, not a gate.** `REVIEWED_CODEX_VERSIONS`
+in `src/amap_codex/config.py` lists the builds these probes have covered. A
+deployment runs the build it states whether or not it is listed, and
+`status.json` reports `codex_reviewed`. On any build, delivery relies on
+live checks: the launched app-server reports the stated build, each
+thread's MCP registry is exactly the trusted one, and a protocol error fails
+loudly. A move between builds keeps the journal and its thread and is
+recorded in its audit table. Add a build to the list after re-running the
+probes below against it.
+
+## codex-cli 0.161.0 (reviewed October 7, 2026; Linux aarch64)
+
+Probes that need no login, each also re-run on 0.160.1 for comparison:
+
+- **Schema subset.** `generate-json-schema` output differs from the
+  committed 0.160.1 subset in four files: `v2/ThreadReadResponse`,
+  `v2/TurnCompletedNotification`, `v2/TurnStartResponse` and
+  `v2/TurnStartParams`. In the first three, `CodexErrorInfo` changes from
+  `oneOf` to `anyOf` with one added open variant (`string` or `object`), for
+  error codes a later build adds. The connector never reads that field. The
+  fourth changes one description string. The committed subset stays 0.160.1's.
+- **Three-server registry.** [mcp-registry-probe-0.161.0.json](mcp-registry-probe-0.161.0.json):
+  a thread is created and its effective registry is exactly the three
+  trusted servers and their tool sets.
+- **MCP environment.** Without `env_vars` a stdio server receives only `HOME`
+  and `PATH`, and the required servers fail to start; with it, exactly the
+  listed variables arrive. Same as 0.160.1.
+- **No model.** `thread/start` without `model` and with an empty
+  `CODEX_HOME` is accepted and reports `gpt-6.1-sol`. Same as 0.160.1.
+- **Login status.** Unauthenticated, `codex login status` prints `Not
+  logged in` and exits 1. Same as 0.160.1.
+
+Not re-run: the authenticated live probe (an actual turn with an MCP read).
 
 [live-host-probe.json](live-host-probe.json) records a real authenticated
 host-side run using the account's selected `gpt-6.1-sol`, low reasoning effort,

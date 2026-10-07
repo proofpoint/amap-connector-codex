@@ -246,6 +246,8 @@ def test_delivery_and_operational_artifacts_exclude_sender_content(tmp_path):
         finally:
             await supervisor.close()
     asyncio.run(check())
+    status=json.loads((config.state_dir/'status.json').read_text())
+    assert (status['codex_version'],status['codex_reviewed'])==(config.codex_version,True)
     for path in [Path(config.launch_argv[-1]),config.state_dir/'journal.sqlite3',config.state_dir/'status.json']:
         value=path.read_bytes()
         assert b'SECRET_BODY' not in value

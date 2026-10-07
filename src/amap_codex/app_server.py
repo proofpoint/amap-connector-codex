@@ -89,7 +89,7 @@ class AppServerClient:
                 "capabilities": {"experimentalApi": True},
             })
             if self.expected_version and not version_matches(self.initialize_result.get("userAgent"), self.expected_version):
-                raise RuntimeError("launcher app-server version does not match pinned compatibility build")
+                raise RuntimeError("launched app-server reports a version other than the build the configuration states")
             await self.notify("initialized", {})
         except BaseException:
             await self.stop()

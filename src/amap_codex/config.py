@@ -10,11 +10,13 @@ import tomllib
 
 ADDR_SPEC = re.compile(r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+@[A-Za-z0-9.-]+")
 # Codex builds whose app-server protocol has been reviewed against the
-# committed schema subset (compatibility/). A deployment states which one it
-# runs; any other is refused. Add a build only after re-running the
-# compatibility probes against it.
-SUPPORTED_CODEX_VERSIONS = ("codex-cli 0.160.1",)
-SUPPORTED_CODEX = SUPPORTED_CODEX_VERSIONS[0]
+# committed schema subset (compatibility/). Information, not a gate: a
+# deployment runs the build it states, reviewed or not, and the status
+# reports which. What protects delivery on any build is checked live: the
+# launched app-server reports the stated build, each thread's MCP registry
+# is exactly the trusted one, and a protocol error fails loudly.
+REVIEWED_CODEX_VERSIONS = ("codex-cli 0.160.1", "codex-cli 0.161.0")
+CODEX_VERSION = re.compile(r"codex-cli [0-9][0-9A-Za-z.+-]{0,63}")
 
 @dataclass(frozen=True)
 class Lane:
@@ -38,7 +40,7 @@ class Config:
     approval_policy: str
     operator_instructions: Path
     outcome_dir: Path | None = None
-    codex_version: str = SUPPORTED_CODEX
+    codex_version: str = REVIEWED_CODEX_VERSIONS[0]
     poll_interval_ms: int = 1000
     max_pending_events: int = 1000
     rpc_timeout_seconds: float = 30
@@ -105,8 +107,8 @@ class Config:
             raise ValueError("peer lane requires self_address")
         if not isinstance(self.launch_argv, list) or not self.launch_argv or any(not isinstance(a, str) or not a or "\x00" in a for a in self.launch_argv):
             raise ValueError("launch_argv must be an explicit nonempty argument vector")
-        if self.codex_version not in SUPPORTED_CODEX_VERSIONS:
-            raise ValueError(f"codex_version must be one of {', '.join(SUPPORTED_CODEX_VERSIONS)}")
+        if not isinstance(self.codex_version, str) or not CODEX_VERSION.fullmatch(self.codex_version):
+            raise ValueError("codex_version must be the build `codex --version` prints, e.g. 'codex-cli 0.161.0'")
         if self.sandbox not in {"read-only", "workspace-write", "danger-full-access"}:
             raise ValueError("unsupported sandbox")
         if self.approval_policy not in {"untrusted", "on-failure", "on-request", "never"}:
@@ -196,6 +198,10 @@ class Config:
             raise ValueError(f"not an explicit existing directory: {path}")
         if not os.access(path, os.R_OK | os.X_OK):
             raise ValueError(f"directory is inaccessible: {path}")
+
+    @property
+    def codex_reviewed(self):
+        return self.codex_version in REVIEWED_CODEX_VERSIONS
 
     def fingerprint(self):
         value = asdict(self)

@@ -328,6 +328,7 @@ class Supervisor:
         status.update(enabled_lanes=[l.name for l in self.config.lanes],
                       operator_runs=self.journal.operator_runs(),
                       claim_state="held" if self.ownership.claims else "released",
+                      codex_reviewed=self.config.codex_reviewed,
                       backlog=self.backlog, blocked_requests=self.delivery.client.blocked,
                       supervisor_pid=os.getpid(), updated_at=time.time())
         if self.ownership.control:

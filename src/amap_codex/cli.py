@@ -143,6 +143,7 @@ def main(argv=None):
             print(json.dumps(read_status(config), indent=2))
         elif args.command == "doctor":
             result = {"configuration": "valid", "expected_codex_version": config.codex_version,
+                      "codex_reviewed": config.codex_reviewed,
                       "fingerprint": config.fingerprint(), "enabled_lanes": [l.name for l in config.lanes],
                       "live_release_gates": "actual mounts, router, model and approval behavior require deployment verification"}
             if args.probe:

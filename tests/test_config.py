@@ -79,8 +79,16 @@ def test_symlinks_and_instruction_fingerprint(tmp_path):
     config.state_dir = link
     with pytest.raises(ValueError,match='symlink'): config.validate()
 
-@pytest.mark.parametrize('field,value',[('rpc_timeout_seconds',float('nan')),('poll_interval_ms',True),('codex_version','codex-cli 0.1'),('cwd','relative')])
+@pytest.mark.parametrize('field,value',[('rpc_timeout_seconds',float('nan')),('poll_interval_ms',True),('codex_version','0.161.0'),('cwd','relative')])
 def test_invalid_settings(tmp_path,field,value):
     config = configured(tmp_path)
     setattr(config,field,value)
     with pytest.raises(ValueError): config.validate()
+
+
+def test_an_unreviewed_build_is_stated_and_runs(tmp_path):
+    config = configured(tmp_path)
+    config.codex_version = 'codex-cli 0.199.0'
+    assert config.validate().codex_reviewed is False
+    config.codex_version = 'codex-cli 0.161.0'
+    assert config.codex_reviewed is True
