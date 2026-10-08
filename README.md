@@ -6,8 +6,8 @@ from local MCP servers and can create outbound requests in the runtime's
 drop box. The runtime remains responsible for policy and sending.
 
 This is a reference implementation, and Codex app-server is experimental.
-It runs in a live Sandy fleet with the real router: a Codex agent delegates to
-and answers Claude agents in both directions ([docs/SANDY.md](docs/SANDY.md)).
+It has run in a live AMAP fleet with the reference router, delegating to and
+answering other agents in both directions.
 The reviewed Codex builds are `codex-cli 0.160.1` and `0.161.0`; any build
 runs, and delivery relies on live checks. The Compose example is provided for
 review and has not been run as a live deployment. See
@@ -73,11 +73,10 @@ the event becomes uncertain and automatic dispatch pauses for the instance.
 
 See [docs/OPERATIONS.md](docs/OPERATIONS.md) before using recovery commands.
 
-For a Codex sandbox in a Sandy fleet, use
-[amap-deploy-sandy](https://github.com/proofpoint/amap-deploy-sandy), which runs
-this supervisor inside the sandbox; see [docs/SANDY.md](docs/SANDY.md). The
-connector keeps a generic launcher interface: Sandy-specific discovery, mounts
-and configuration belong to the deployment adapter.
+A deployment adapter renders the configuration, mounts and launcher for its
+isolation system, and decides where the supervisor runs
+([docs/DESIGN.md](docs/DESIGN.md) §1). The connector knows no particular
+adapter.
 
 ## Trust and sending
 
@@ -121,8 +120,7 @@ Run deterministic checks with `python -m pip install -e '.[test]'`, then
 ## Current limitations
 
 - One namespace, one supervisor, and one persistent Codex thread per instance.
-- Deployments other than Sandy (the Compose example, launcher control) have
-  not been run live.
+- The Compose example and launcher control have not been run live.
 - The `outbound/ext/codex/outcomes` path is consumed by a router configured
   for it (amap-router-local's `connector_outcome_ids`).
 - The connector has no UI for approvals, interrupted work, or recovery.

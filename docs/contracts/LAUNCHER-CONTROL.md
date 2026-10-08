@@ -2,7 +2,7 @@
 
 The generic supervisor supports direct local process groups by default. An
 external isolation adapter opts in through `launcher_control_argv`,
-`deployment_id` and `owner_domain`. No Sandy or Docker dependency is required.
+`deployment_id` and `owner_domain`. No particular isolation system is required.
 The request and response JSON schemas in this directory define the wire shape.
 
 Launch the configured `launch_argv` as a foreground process with JSONL stdio,
@@ -14,8 +14,8 @@ For control, the supervisor appends exactly `inspect` or `stop` to the configure
 argument vector. One JSON object arrives on stdin; return one JSON object on
 stdout and exit zero. Responses must echo both identities and integer version 1.
 No extra fields are allowed. Stdout and stderr are each limited to 65,536 bytes.
-The configurable wall deadline defaults to 10 seconds. The Sandy adapter uses
-15 seconds for a root helper whose termination check is bounded to 9 seconds.
+The configurable wall deadline defaults to 10 seconds; an adapter whose
+termination check takes longer configures a longer one.
 The supervisor kills and reaps an expired helper process group. Nonzero exit,
 wrong identity, malformed/oversized output and timeout all mean unknown.
 
@@ -53,4 +53,4 @@ there is no recorded controller execution to clean; inspect retained guards
 rather than interpreting that CLI error as a stopped remote execution.
 
 The portable fixtures in tests/test_rollout_core.py use an independent Python
-launcher/control helper. Sandy managed execution is a separate adapter test.
+launcher/control helper. An adapter's own execution control is that adapter's test.

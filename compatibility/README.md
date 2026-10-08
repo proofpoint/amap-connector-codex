@@ -1,8 +1,7 @@
 # Codex compatibility evidence
 
 First reviewed build: **codex-cli 0.160.1**, Linux aarch64, inspected October
-6, 2026; 0.161.0 is reviewed below. The live Sandy deployment is described in
-[docs/SANDY.md](../docs/SANDY.md).
+6, 2026; 0.161.0 is reviewed below.
 
 The installed binary generated the committed protocol subset with
 `codex app-server generate-json-schema --out DIRECTORY`.
@@ -21,6 +20,26 @@ thread's MCP registry is exactly the trusted one, and a protocol error fails
 loudly. A move between builds keeps the journal and its thread and is
 recorded in its audit table. Add a build to the list after re-running the
 probes below against it.
+
+## Live deployment (October 8, 2026; codex-cli 0.161.0)
+
+One Codex agent served by this supervisor, running inside the agent's
+isolation environment, with the reference router and another agent in the
+fleet:
+
+- Startup: thread bound, both lanes claimed, nothing uncertain; an operator
+  kickoff listed both inboxes and finished.
+- Codex → peer → Codex: the agent delegated through `inbox_submit.submit` and
+  saw it accepted; the peer's reply was delivered into the bound thread with
+  `in_reply_to` of the original message.
+- Peer → Codex → peer: the agent read the delegation, did the work it asked
+  for, and replied; the router's notice of the reply carries `in_reply_to` of
+  the request.
+- `migrate` adopted changed operator instructions on the kept journal and a
+  new thread, and no notice was delivered twice.
+
+The deployment found the `codex_apps`, fresh-thread history and instruction
+behaviors recorded below.
 
 ## codex-cli 0.161.0 (reviewed October 7, 2026; Linux aarch64)
 

@@ -9,29 +9,27 @@ Suggested repository location for this document: `docs/DESIGN.md`
 
 Build a local Codex connector that preserves the existing AMAP arrangement: a trusted runtime/router publishes into per-agent filesystem namespaces, an isolated agent reads locally mounted inbound data, and outbound requests pass through a filesystem drop box to the runtime for policy enforcement and sending.
 
-Use a small supervisor to launch and drive one dedicated `codex app-server` over stdio. Where it runs is a deployment choice; on Sandy it runs inside the agent's sandbox (§1.1). Reuse the Claude connector's local MCP read and submit servers. Replace its Claude-specific Unix-domain-socket delivery code with a Codex app-server adapter. The supervisor, rather than the model, watches for inbound notices and starts work.
-
-Target an initial reference implementation in three engineering days, with a fourth day reserved for integration findings. This estimate assumes an existing working AMAP router, an existing isolation/deployment mechanism, and a Codex account with access to the selected model. It excludes building a router, a general agent platform, or a new sandbox manager.
+Use a small supervisor to launch and drive one dedicated `codex app-server` over stdio. Where it runs is a deployment choice (§1.1, §1.2). Reuse the Claude connector's local MCP read and submit servers. Replace its Claude-specific Unix-domain-socket delivery code with a Codex app-server adapter. The supervisor, rather than the model, watches for inbound notices and starts work.
 
 Longer term, add a network facade over the same filesystem contract. Its MCP tools and MCP Events will support remote agents such as Work Cloud and dots. Preserve a small separation between notice handling and delivery transport now; do not implement the remote service in v0.1.
 
-### 1.1 Sandy deployment: the supervisor runs in the sandbox
+### 1.1 In-environment supervision
 
-On Sandy, the supervisor runs **inside the agent's container**, started as the AMAP feature's supervised `entry` (the same mechanism that runs the Claude connector's delivery daemon), and launches `codex app-server` as a direct local child through the default launcher. Codex uses its own sandbox-managed `~/.codex`. No root execution, host service, host-side journal or credential copy is involved, and Sandy needs no new interface.
+The supervisor can run **inside the agent's isolation environment**, started by that environment's process supervision, and launch `codex app-server` as a direct local child through the default launcher. Codex then uses the environment's own `~/.codex`. No root execution, host service, host-side journal or credential copy is involved, and the isolation system needs no new interface.
 
-The trade is accepted on the spec's own trust model. The supervisor's journal and claims are reachable by the agent it serves, so a compromised agent can disrupt delivery to itself. It can already ignore, misreport or forge outcomes about its own work (AMAP §13.15), and the Runtime's own record and its submit-time authorization are what the fleet relies on. The Claude connector runs with the same posture.
+The trade is accepted on the spec's own trust model. The supervisor's journal and claims are reachable by the agent it serves, so a compromised agent can disrupt delivery to itself. It can already ignore, misreport or forge outcomes about its own work (AMAP §13.15), and the Runtime's own record and its submit-time authorization are what the fleet relies on. The Claude connector's delivery daemon can run with the same posture.
 
 ### 1.2 Deferred: host-side supervision
 
-Running the supervisor (for Codex, and for Claude) on the host instead, outside the agent's reach, remains a possible future deployment. The connector keeps the launcher-control contract (`docs/contracts/LAUNCHER-CONTROL.md`) so that move is a new deployment adapter, not a connector rewrite. It is deferred because what it protects, the agent-side delivery journal, is not evidence under the spec, while its cost is a host-to-session execution interface Sandy does not provide (exact container binding, inspect/stop with proof that every descendant has stopped, survival of attach-client death), per-OS host services, and for Claude a delivery path into a socket inside the container.
+Running the supervisor (for Codex, and for Claude) on the host instead, outside the agent's reach, remains a possible future deployment. The connector keeps the launcher-control contract (`docs/contracts/LAUNCHER-CONTROL.md`) so that move is a new deployment adapter, not a connector rewrite. It is deferred because what it protects, the agent-side delivery journal, is not evidence under the spec, while its cost is a host-to-session execution interface the isolation system must provide (exact container binding, inspect/stop with proof that every descendant has stopped, survival of attach-client death), per-OS host services, and for Claude a delivery path into a socket inside the container.
 
 Revisit it when any of these holds:
 
-1. Sandy ships such an execution interface as a maintained, consumer-neutral contract ([rappdw/sandy#446](https://github.com/rappdw/sandy/issues/446)).
+1. The isolation system ships such an execution interface as a maintained, consumer-neutral contract.
 2. A requirement appears that an agent must not be able to tamper with its own delivery state, such as an audit or compliance need.
 3. Agents are to be started on demand for incoming work, rather than delivered to only while an operator-launched session runs.
 
-**Status:** the required app-server behavior is measured on the reviewed builds (`compatibility/README.md`), and the Sandy deployment has carried delegations in both directions with the real router (`docs/SANDY.md`). Official documentation labels app-server experimental, so this is a reference release rather than a production support commitment; any build runs, and delivery relies on the live checks. [S4]
+**Status:** the required app-server behavior is measured on the reviewed builds (`compatibility/README.md`), and a live deployment has carried delegations in both directions with the reference router (`compatibility/README.md`). Official documentation labels app-server experimental, so this is a reference release rather than a production support commitment; any build runs, and delivery relies on the live checks. [S4]
 
 ## 2. Scope
 

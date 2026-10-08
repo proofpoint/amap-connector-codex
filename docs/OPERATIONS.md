@@ -171,7 +171,6 @@ Reusing an ID with the same input is idempotent; changed content is refused.
 Unknown dispatch blocks all further work and is never automatically replayed.
 recover-operator RUN_ID --action hold|handled --note NOTE records an audit entry;
 handled retires an unresolved run without sending it again. No kickoff retry action exists.
-For the Sandy deployment, see [SANDY.md](SANDY.md).
 
 ## Changing the configuration of a running instance
 
