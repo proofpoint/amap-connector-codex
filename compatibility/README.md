@@ -134,3 +134,11 @@ removes it. [mcp-registry-probe-chatgpt-0.161.0.json](mcp-registry-probe-chatgpt
 is the probe run with `--chatgpt-login`: a synthetic login with every endpoint
 and proxy pointed at a closed local port, so nothing leaves the machine.
 Without the override, the same run is refused with `unexpected ['codex_apps']`.
+
+**A thread the app-server started has no listable history until its first
+turn.** Measured on 0.160.1 and 0.161.0: `thread/read` with `includeTurns`
+on such a thread is refused (-32601, "list_turns is not supported yet"); the
+same thread resumed in a new app-server reads, with or without a turn. The
+supervisor reads history once, at startup, so a thread it has just started
+is read as empty without the call. On 0.161.0 the refusal also lasts a
+moment past the first `turn/start`; nothing reads history there.

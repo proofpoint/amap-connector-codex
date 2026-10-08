@@ -45,6 +45,7 @@ class DeliveryResult:
 class AppServerClient:
     def __init__(self, argv: list[str] | tuple[str, ...], *, timeout: float = 30,
                  frame_limit: int = 64 * 1024 * 1024, on_spawn=None, expected_version=None, env=None):
+        self.turn_starts = 0
         self.argv = argv
         self.timeout = timeout
         self.frame_limit = frame_limit
@@ -125,6 +126,10 @@ class AppServerClient:
         rpc_id = self.reserve_id() if rpc_id is None else rpc_id
         if rpc_id in self._pending:
             raise ValueError("RPC ID already in use")
+        if method == "turn/start":
+            # Counted before the write: a turn whose request may have
+            # reached the app-server may exist.
+            self.turn_starts += 1
         future = asyncio.get_running_loop().create_future()
         self._pending[rpc_id] = future
         try:
@@ -258,6 +263,10 @@ class AppServerDelivery:
         if trusted_config is not None:
             self.settings['config'] = trusted_config
         self.thread_id: str | None = None
+        # The client's turn/start count when this adapter started its thread
+        # in the running app-server, which cannot list that thread's turns
+        # until it has one; None for a resumed thread.
+        self._started_at_turns: int | None = None
         # The agent's own MCP servers the bound thread runs with switched off.
         self.disabled_servers: list[str] = []
 
@@ -278,6 +287,7 @@ class AppServerDelivery:
         if not isinstance(actual, str) or not actual or (thread_id and actual != thread_id):
             raise RuntimeError("app-server returned invalid target binding")
         self.thread_id = actual
+        self._started_at_turns = None if thread_id else self.client.turn_starts
         if self.trusted_config is not None:
             statuses=[]
             cursor=None
@@ -349,6 +359,11 @@ class AppServerDelivery:
             return DeliveryResult("uncertain", detail=str(exc))
 
     async def observe(self) -> dict:
+        if self._started_at_turns == self.client.turn_starts:
+            # A thread this adapter started, with no turn yet: its history is
+            # empty, and thread/read refuses to list it (measured on
+            # codex-cli 0.160.1 and 0.161.0: -32601).
+            return {"thread": {"id": self.thread_id, "turns": []}}
         return await self.client.request("thread/read", {"threadId": self.thread_id, "includeTurns": True})
 
     async def interrupt(self, turn_id: str) -> None:

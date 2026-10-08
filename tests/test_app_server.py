@@ -33,6 +33,20 @@ def test_initialize_accept_complete_and_reap():
     asyncio.run(check())
 
 
+def test_a_started_thread_reads_empty_until_its_first_turn_then_reads_the_turn():
+    async def check():
+        delivery = adapter()
+        try:
+            await delivery.start_or_resume()
+            assert (await delivery.observe())["thread"]["turns"] == []
+            result = await delivery.deliver(PAYLOAD, delivery.client.reserve_id())
+            turns = (await delivery.observe())["thread"]["turns"]
+            assert [t["id"] for t in turns] == [result.turn_id]
+        finally:
+            await delivery.stop()
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize("mode", ["death", "timeout", "rpc_error", "malformed", "oversized"])
 def test_ambiguous_failures_never_report_unsent(mode):
     async def check():

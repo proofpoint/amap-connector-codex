@@ -6,7 +6,9 @@ config/read reports, merged per server with the thread's override, where
 `enabled = false` leaves a server listed with no tools. FAKE_UNREPORTED_MCP
 names a registration config/read does not report; FAKE_IGNORE_DISABLE keeps
 a disabled server's tools. FAKE_CHATGPT_APPS models a ChatGPT login, under
-which Codex adds `codex_apps` unless the thread sets `features.apps = false`."""
+which Codex adds `codex_apps` unless the thread sets `features.apps = false`.
+Like the real one, it refuses to list the turns of a thread it started until
+that thread has a turn."""
 import json
 import os
 import sys
@@ -21,6 +23,7 @@ ambient = json.loads(os.environ.get("FAKE_AMBIENT_MCP", "{}"))
 unreported = os.environ.get("FAKE_UNREPORTED_MCP")
 override = {}
 apps_off = False
+unturned = False
 
 
 def registry():
@@ -68,14 +71,19 @@ for raw in sys.stdin:
             continue
         override = (params.get("config") or {}).get("mcp_servers", {})
         apps_off = ((params.get("config") or {}).get("features") or {}).get("apps") is False
+        unturned = method == "thread/start"
         result = {"thread": {"id": thread_id, "turns": history}}
     elif method == "config/read":
         result = {"config": {"mcp_servers": ambient}, "origins": {}}
     elif method == "mcpServerStatus/list":
         result = {"data": registry(), "nextCursor": None}
     elif method == "thread/read":
+        if unturned:
+            emit({"id": rpc_id, "error": {"code": -32601, "message": "list_turns is not supported yet"}})
+            continue
         result = {"thread": {"id": thread_id, "turns": history}}
     elif method == "turn/start":
+        unturned = False
         turn_id = f"turn-{len(history) + 1}"
         item = {"type": "functionCallOutput", "id": f"item-{turn_id}", **params["toolOutput"]} if "toolOutput" in params else {
             "type": "userMessage", "id": f"item-{turn_id}", "content": params["input"]}
