@@ -1,9 +1,13 @@
 # Operations
 
 This guide covers the pilot supervisor's local state and the boundaries between
-notice acceptance, model execution, and outbound sending. Run the supervisor
-under a dedicated host identity. Keep its private state directory and logs
-outside every agent mount.
+notice acceptance, model execution, and outbound sending. The live deployment
+runs the supervisor inside the agent's isolation environment and launches a
+local app-server using that environment's Codex home. Its journal and claims
+are reachable by the agent it serves; the router's records and authorization
+remain authoritative. A host-side deployment is an optional alternative and
+keeps supervisor state outside every agent mount. See
+[the deployment models](DESIGN.md#11-in-environment-supervision).
 
 ## Start and check health
 
@@ -16,7 +20,8 @@ amap-codex --config /etc/amap-connector/connector.toml status
 amap-codex --config /etc/amap-connector/connector.toml run
 ```
 
-Create the private host state directory (mode `0700`) before inspection.
+Create the supervisor state directory (mode `0700`) before inspection, using
+paths visible in the environment where these commands run.
 The default `doctor` validates local settings and configured paths. It does not
 start Codex or deliver notices. `doctor --probe` performs the configured
 app-server stdio handshake and start/resume check without scanning for work.
@@ -36,6 +41,11 @@ acceptance, and recent operational errors. It does not expose message bodies.
 The journal stores event metadata, hashes, attempts, and state transitions;
 it does not store mail or peer bodies. Protect the journal and status output
 as operational data because they can contain addresses and identifiers.
+After a successful thread bind and clean startup reconciliation, a resolved
+`last_error` is cleared and retained in the journal audit as
+`operational_error_cleared`. Unavailable history, unresolved delivery/operator
+work, client errors and uncertain outcome publication keep their diagnostics.
+Clearing a diagnostic never resets delivery state or retries work.
 
 ## Interpret the state
 
@@ -128,7 +138,12 @@ thread to bypass an uncertain event.
 On graceful stop, the supervisor stops dispatching, waits within its configured
 shutdown bound, interrupts/stops the app-server, reaps the launcher, and
 releases acquired claims. If acceptance is unresolved, it persists uncertainty
-for operator recovery. The Compose example uses a stable uniquely named one-off
+for operator recovery. For the in-environment model, retain the journal, lane
+claims and Codex home across an isolation-environment restart. Do not reset
+state or run `migrate` to bypass an interrupted turn. Confirm the environment
+has terminated the previous app-server before starting its replacement.
+
+The optional Compose example uses a stable uniquely named one-off
 container and stops that container when the host launcher exits. An existing
 container blocks relaunch until the operator verifies cleanup. Confirm this
 behavior with the actual Docker Engine/Compose version before relying on it.
@@ -146,13 +161,26 @@ unavailable event visibly; do not fetch content from another lane or provider.
 
 ## Pilot gate
 
-The Compose and Codex settings are examples, not proof of a working isolated
-deployment. Before enabling real mail or peer traffic, record the exact Codex
+The in-environment pilot completed delegation and correlated replies in both
+directions, plus an instruction migration that kept the delivery journal.
+See [the measured evidence](../compatibility/README.md#live-deployment-october-8-2026-codex-cli-01610).
+This does not prove the optional Compose/remote launcher or every recovery
+and isolation property. Before enabling traffic in a new deployment, record the exact Codex
 version, model, image, host and sandbox paths, router publish-order guarantee,
 claim visibility, network/auth provisioning, process cleanup result, and
 router outcome support. Then complete a synthetic mail read and a real-router
 peer request/reply with distinct notice and message IDs. Repeat across a
 supervisor restart and prove an accepted or uncertain event is not replayed.
+
+Shared managed refresh and real interactive-pane/supervisor turns across
+rotation were measured on 0.161.0, as was recovery from an app-server/controller
+crash during a turn. Automatic expiry-driven TUI refresh was not induced, and
+an actual isolation-environment replacement during a turn still needs evidence.
+Run further checks on a dedicated test instance, retain its journal, and
+inspect positive history and runtime results. Record the measured build and
+scope; process-crash evidence does not establish whole-environment recovery.
+The [live-check procedure](LIVE-CHECKS.md) provides the refresh probe and
+separate process-crash versus external-restart recovery steps.
 
 
 ## Controlled isolation and private operator runs
@@ -165,7 +193,9 @@ PID lookup. Stop the host service, run cleanup --stop, then retain the journal a
 binding records for normal startup reconciliation. Unknown cleanup remains held.
 
 Opt-in operator_kickoff_enabled accepts a privileged kickoff RUN_ID
---instructions-file HOST_FILE in a private host queue. The supervisor commits it
+--instructions-file FILE in a supervisor-owned queue. FILE is visible where
+the command runs. The queue lives with supervisor state; its accessibility
+follows the selected supervision model. The supervisor commits it
 before dispatch on the existing serial thread, independently from notice artifacts.
 Reusing an ID with the same input is idempotent; changed content is refused.
 Unknown dispatch blocks all further work and is never automatically replayed.

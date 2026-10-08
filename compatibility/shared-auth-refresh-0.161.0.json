@@ -1,0 +1,17 @@
+{
+  "scope": "two real app-server processes sharing one existing Codex home; no interactive-pane, inference or sandbox-restart attestation",
+  "timestamp_utc": "2026-10-08T12:55:28.737404+00:00",
+  "codex_version": "codex-cli 0.161.0",
+  "shared_home": true,
+  "refresh_requested": true,
+  "inference": false,
+  "submissions": 0,
+  "both_accounts_available": true,
+  "refresh_results": [
+    "chatgpt",
+    "chatgpt"
+  ],
+  "refresh_metadata_changed": true,
+  "refresh_succeeded": true,
+  "both_accounts_available_after": true
+}

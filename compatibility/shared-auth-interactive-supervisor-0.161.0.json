@@ -1,0 +1,18 @@
+{
+  "scope": "real interactive TUI and in-environment Supervisor remain usable across concurrent managed token rotation by two additional app-servers; no automatic TUI refresh, sandbox restart or router attestation",
+  "timestamp_utc": "2026-10-08T13:01:26.799294+00:00",
+  "codex_version": "codex-cli 0.161.0",
+  "shared_codex_home": true,
+  "original_processes_kept_running": true,
+  "concurrent_refresh_succeeded": true,
+  "supervisor_before": true,
+  "supervisor_after": true,
+  "supervisor_tool_calls": 0,
+  "tui_before": true,
+  "tui_after": true,
+  "tui_tool_calls": 0,
+  "operator_runs_finished": true,
+  "inference": true,
+  "submissions": 0,
+  "passed": true
+}
