@@ -172,3 +172,19 @@ Unknown dispatch blocks all further work and is never automatically replayed.
 recover-operator RUN_ID --action hold|handled --note NOTE records an audit entry;
 handled retires an unresolved run without sending it again. No kickoff retry action exists.
 Use the [operator runbook](OPERATOR-RUNBOOK.md) for the reviewed pilot adapter.
+
+## Changing the configuration of a running instance
+
+The journal records the configuration fingerprint it was created under, which
+includes the operator instructions and the trusted MCP configuration. A start
+under a different fingerprint is refused with "explicit state migration
+required". A thread keeps the developer instructions it was started with:
+instructions sent on resume are not applied (measured on codex-cli 0.160.1 and
+0.161.0), so changed instructions need a new thread.
+
+With the supervisor stopped or holding, `migrate --note NOTE` is that
+migration. It adopts the current fingerprint, releases the thread binding and
+clears the last error, and audits it as `configuration_migrated`. The journal
+is kept, so no notice is delivered twice; the next start creates a thread with
+the current instructions. It is refused while any event or operator run is in
+flight, and while another controller holds the claims.

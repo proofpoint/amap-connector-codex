@@ -331,3 +331,41 @@ class Journal:
         if state not in {"publishing","published","ambiguous"}: raise ValueError("invalid publication state")
         with self._transaction():
             self.db.execute("UPDATE outcome_transitions SET publication_state=? WHERE id=?", (state,transition_id))
+
+
+def migrate(path, instance_id, fingerprint, note, *, clock=time.time):
+    """Adopt the current configuration as this instance's, the explicit
+    migration a changed fingerprint requires. The journal is kept, so no
+    event is delivered twice; the thread binding is cleared, so the next
+    start creates a thread with the current operator instructions (a resumed
+    thread keeps the ones it started with). Refused while any event or
+    operator run is in flight, since its turn is on the old thread."""
+    if not note.strip():
+        raise ValueError("a nonempty audit note is required")
+    path = Path(path) / "journal.sqlite3"
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("no journal to migrate")
+    db = sqlite3.connect(path, isolation_level=None)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA busy_timeout=5000")
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            row = db.execute("SELECT * FROM instance").fetchone()
+            if row is None or row["instance_id"] != instance_id:
+                raise IntegrityConflict("journal belongs to a different instance")
+            if db.execute("SELECT 1 FROM events WHERE state IN ('dispatching','accepted','uncertain') LIMIT 1").fetchone() \
+                    or db.execute("SELECT 1 FROM operator_runs WHERE state IN ('dispatching','accepted','uncertain') LIMIT 1").fetchone():
+                raise StateConflict("work is in flight on the bound thread; resolve it before migrating")
+            db.execute("UPDATE instance SET fingerprint=?, thread_id=NULL, last_error=NULL", (fingerprint,))
+            db.execute("INSERT INTO audit(event_id,ts,action,note) VALUES(NULL,?,?,?)",
+                       (utc_now(), "configuration_migrated",
+                        f"{row['fingerprint']} -> {fingerprint}; thread {row['thread_id']} released; {note}"[:1000]))
+        except BaseException:
+            db.execute("ROLLBACK")
+            raise
+        db.execute("COMMIT")
+        return {"previous_fingerprint": row["fingerprint"], "fingerprint": fingerprint,
+                "released_thread_id": row["thread_id"]}
+    finally:
+        db.close()

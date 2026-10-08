@@ -162,3 +162,80 @@ def test_probe_version_mismatch_does_not_bind_thread_and_reaps(tmp_path,monkeypa
     assert not (config.state_dir/'journal.sqlite3').exists()
     assert not (config.state_dir/'process.json').exists()
     assert not config.lanes[0].claim_path.exists()
+
+
+def pending_and_bound(config):
+    eid=event_id(config.instance_id,'mail','receiver_notice_b')
+    record=Admission(eid,'mail','receiver_notice_b','b'*64,
+        {'event_id':eid,'lane':'mail','notice_id':'receiver_notice_b'})
+    with Journal(config.state_dir,config.instance_id,config.fingerprint(),config.codex_version,config.codex_model) as journal:
+        journal.admit(record); journal.bind_thread('thread-fixture')
+    return eid
+
+
+def test_changed_instructions_are_migrated_explicitly_keeping_the_journal(tmp_path,capsys):
+    config,path=configured(tmp_path)
+    eid=pending_and_bound(config)
+    old=config.fingerprint()
+    config.operator_instructions.write_text('Revised trusted operator workflow')
+    new=config.fingerprint()
+    with pytest.raises(Exception, match='explicit state migration required'):
+        Journal(config.state_dir,config.instance_id,new,config.codex_version,config.codex_model)
+    assert main(['--config',str(path),'migrate','--note','fleet inbox policy'])==0
+    result=json.loads(capsys.readouterr().out)
+    assert result=={'previous_fingerprint':old,'fingerprint':new,'released_thread_id':'thread-fixture'}
+    with Journal(config.state_dir,config.instance_id,new,config.codex_version,config.codex_model) as journal:
+        assert journal.thread_id is None, 'the next start creates a thread with the new instructions'
+        journal.bind_thread('thread-new')
+    assert raw_event(config,eid)=='pending', 'the journal, and so every delivery record, is kept'
+    db=sqlite3.connect(config.state_dir/'journal.sqlite3')
+    try:
+        action,note=db.execute("SELECT action,note FROM audit ORDER BY id DESC").fetchone()
+        assert action=='configuration_migrated' and 'thread-fixture released' in note and 'fleet inbox policy' in note
+    finally:
+        db.close()
+
+
+def test_migration_is_refused_while_work_is_in_flight(tmp_path,capsys):
+    config,path=configured(tmp_path)
+    eid=unresolved(config)
+    old=config.fingerprint()
+    config.operator_instructions.write_text('Revised trusted operator workflow')
+    assert main(['--config',str(path),'migrate','--note','fleet inbox policy'])==1
+    assert 'in flight' in capsys.readouterr().err
+    db=sqlite3.connect(config.state_dir/'journal.sqlite3')
+    try:
+        assert db.execute('SELECT fingerprint,thread_id FROM instance').fetchone()==(old,'thread-fixture')
+    finally:
+        db.close()
+    assert raw_event(config,eid)=='dispatching'
+
+
+def test_migration_cannot_run_while_the_controller_owns_the_claims(tmp_path,capsys):
+    config,path=configured(tmp_path)
+    pending_and_bound(config)
+    old=config.fingerprint()
+    config.operator_instructions.write_text('Revised trusted operator workflow')
+    with Ownership(config):
+        assert main(['--config',str(path),'migrate','--note','fleet inbox policy'])==1
+        assert 'another controller' in capsys.readouterr().err
+    db=sqlite3.connect(config.state_dir/'journal.sqlite3')
+    try:
+        assert db.execute('SELECT fingerprint FROM instance').fetchone()[0]==old
+    finally:
+        db.close()
+
+
+def test_migration_is_refused_while_an_operator_run_is_in_flight(tmp_path,capsys):
+    config,path=configured(tmp_path)
+    pending_and_bound(config)
+    db=sqlite3.connect(config.state_dir/'journal.sqlite3')
+    try:
+        with db:
+            db.execute("INSERT INTO operator_runs(run_id,instruction_hash,state,rpc_id,turn_id,created_at,updated_at) "
+                       "VALUES('R9',?,'accepted','9','turn-9',0,0)",('c'*64,))
+    finally:
+        db.close()
+    config.operator_instructions.write_text('Revised trusted operator workflow')
+    assert main(['--config',str(path),'migrate','--note','fleet inbox policy'])==1
+    assert 'in flight' in capsys.readouterr().err

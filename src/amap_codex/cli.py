@@ -112,6 +112,8 @@ def main(argv=None):
     operator_recovery.add_argument('run_id')
     operator_recovery.add_argument('--action', choices=['handled', 'hold'], required=True)
     operator_recovery.add_argument('--note', required=True)
+    migration = commands.add_parser('migrate', help='adopt the current configuration; the next start uses a new thread')
+    migration.add_argument('--note', required=True)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s", stream=sys.stderr)
     try:
@@ -149,6 +151,10 @@ def main(argv=None):
             if args.probe:
                 result["probe"] = asyncio.run(doctor_probe(config))
             print(json.dumps(result, indent=2))
+        elif args.command == 'migrate':
+            from .journal import migrate
+            with Ownership(config):
+                print(json.dumps(migrate(config.state_dir, config.instance_id, config.fingerprint(), args.note)))
         elif args.command == 'recover-operator':
             with Ownership(config), Journal(config.state_dir, config.instance_id,
                                            config.fingerprint(), config.codex_version, config.codex_model) as journal:

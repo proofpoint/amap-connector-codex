@@ -142,3 +142,9 @@ same thread resumed in a new app-server reads, with or without a turn. The
 supervisor reads history once, at startup, so a thread it has just started
 is read as empty without the call. On 0.161.0 the refusal also lasts a
 moment past the first `turn/start`; nothing reads history there.
+
+**A thread keeps the developer instructions it started with.** Measured on
+0.160.1 and 0.161.0: `developerInstructions` sent on `thread/resume` are not
+recorded in the thread, and the turn after the resume carries the original
+ones. A change of operator instructions therefore needs a new thread, which
+`migrate` provides (docs/OPERATIONS.md).
