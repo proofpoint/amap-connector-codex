@@ -5,7 +5,8 @@ and 0.161.0): the agent's own registrations (FAKE_AMBIENT_MCP, JSON), which
 config/read reports, merged per server with the thread's override, where
 `enabled = false` leaves a server listed with no tools. FAKE_UNREPORTED_MCP
 names a registration config/read does not report; FAKE_IGNORE_DISABLE keeps
-a disabled server's tools."""
+a disabled server's tools. FAKE_CHATGPT_APPS models a ChatGPT login, under
+which Codex adds `codex_apps` unless the thread sets `features.apps = false`."""
 import json
 import os
 import sys
@@ -19,10 +20,13 @@ initialized = False
 ambient = json.loads(os.environ.get("FAKE_AMBIENT_MCP", "{}"))
 unreported = os.environ.get("FAKE_UNREPORTED_MCP")
 override = {}
+apps_off = False
 
 
 def registry():
     names = set(ambient) | set(override) | ({unreported} if unreported else set())
+    if os.environ.get("FAKE_CHATGPT_APPS") and not apps_off:
+        names.add("codex_apps")
     out = []
     for name in sorted(names):
         server = {**ambient.get(name, {}), **override.get(name, {})}
@@ -63,6 +67,7 @@ for raw in sys.stdin:
             emit({"id": rpc_id, "error": {"code": -32001, "message": "missing"}})
             continue
         override = (params.get("config") or {}).get("mcp_servers", {})
+        apps_off = ((params.get("config") or {}).get("features") or {}).get("apps") is False
         result = {"thread": {"id": thread_id, "turns": history}}
     elif method == "config/read":
         result = {"config": {"mcp_servers": ambient}, "origins": {}}

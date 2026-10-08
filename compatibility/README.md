@@ -125,3 +125,12 @@ and the check requires exactly that. A registration `config/read` does not
 report, or one named like a trusted server, is refused. The probe gives its
 Codex home two such servers, one enabled and one already disabled. This probe
 is host protocol evidence and does not close the live deployment gates.
+
+**Codex's own `codex_apps` server is kept out of the thread.** Measured on
+0.160.1 and 0.161.0: under a ChatGPT login, the `apps` feature (stable, on by
+default) adds a `codex_apps` server to every thread, and `config/read` does
+not report it. The thread's override sets `features.apps = false`, which
+removes it. [mcp-registry-probe-chatgpt-0.161.0.json](mcp-registry-probe-chatgpt-0.161.0.json)
+is the probe run with `--chatgpt-login`: a synthetic login with every endpoint
+and proxy pointed at a closed local port, so nothing leaves the machine.
+Without the override, the same run is refused with `unexpected ['codex_apps']`.

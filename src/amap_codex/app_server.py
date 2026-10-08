@@ -308,7 +308,9 @@ class AppServerDelivery:
         """The thread's MCP configuration: the trusted servers, and every
         server the agent's own Codex configuration registers switched off.
         Codex merges a thread's MCP override into the registrations it
-        already has, so those would otherwise join the thread."""
+        already has, so those would otherwise join the thread. The `apps`
+        feature is off too: under a ChatGPT login it adds Codex's own
+        `codex_apps` server, which config/read does not report."""
         read = await self.client.request("config/read", {"cwd": self.settings["cwd"]})
         servers = (read.get("config") or {}).get("mcp_servers") or {}
         if not isinstance(servers, dict):
@@ -320,6 +322,7 @@ class AppServerDelivery:
         disabled = set(servers) - TRUSTED_SERVERS
         config = copy.deepcopy(self.trusted_config)
         config["mcp_servers"].update({name: {"enabled": False} for name in sorted(disabled)})
+        config.setdefault("features", {})["apps"] = False
         return config, disabled
 
     def turn_params(self, payload: dict) -> dict:

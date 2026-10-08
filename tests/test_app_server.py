@@ -175,3 +175,10 @@ def test_a_registration_config_read_did_not_report_is_refused(monkeypatch):
     delivery = trusted_adapter(monkeypatch, FAKE_UNREPORTED_MCP="project_own")
     with pytest.raises(RuntimeError, match="unexpected \\['project_own'\\]"):
         start(delivery)
+
+
+def test_codex_apps_stays_out_of_the_thread_under_a_chatgpt_login(monkeypatch):
+    delivery = trusted_adapter(monkeypatch, FAKE_CHATGPT_APPS="1")
+    assert start(delivery) == "thread-fixture"
+    assert delivery.disabled_servers == []
+    assert "features" not in delivery.trusted_config, "the trusted configuration itself is not changed"

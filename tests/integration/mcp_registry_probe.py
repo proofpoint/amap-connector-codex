@@ -1,6 +1,7 @@
 """Opt-in pinned three-server MCP startup check. No inference or submissions."""
 import argparse
 import asyncio
+import base64
 from datetime import datetime, timezone
 import json
 import os
@@ -12,7 +13,29 @@ from amap_codex.app_server import AppServerClient, AppServerDelivery
 import subprocess
 
 
-async def probe(binary, model, output):
+DEAD_ENDPOINT = 'http://127.0.0.1:9'
+
+
+def chatgpt_login(home):
+    """A synthetic ChatGPT login, under which Codex adds its `codex_apps`
+    server. Every endpoint and proxy points at a closed local port, so
+    nothing leaves the machine; returns the environment that does that."""
+    def part(value):
+        return base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b'=').decode()
+    claims = {'https://api.openai.com/auth': {'chatgpt_plan_type': 'pro', 'chatgpt_account_id': 'synthetic',
+              'chatgpt_user_id': 'synthetic'}, 'email': 'synthetic@example.invalid', 'exp': 4102444800}
+    token = f"{part({'alg': 'none', 'typ': 'JWT'})}.{part(claims)}.synthetic"
+    (home / 'auth.json').write_text(json.dumps({'OPENAI_API_KEY': None, 'last_refresh': '2099-01-01T00:00:00Z',
+        'tokens': {'id_token': token, 'access_token': token, 'refresh_token': 'synthetic', 'account_id': 'synthetic'}}))
+    with (home / 'config.toml').open('a') as handle:
+        handle.write(f'chatgpt_base_url = "{DEAD_ENDPOINT}"\nopenai_base_url = "{DEAD_ENDPOINT}"\n')
+    env = {key: value for key, value in os.environ.items() if key.lower() != 'no_proxy'}
+    for key in ('HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY'):
+        env[key] = env[key.lower()] = DEAD_ENDPOINT
+    return env
+
+
+async def probe(binary, model, output, chatgpt):
     build = subprocess.run([binary, '--version'], capture_output=True, text=True, check=True).stdout.split('\n')[0].strip()
     repo = Path(__file__).resolve().parents[2]
     with tempfile.TemporaryDirectory(prefix='amap-mcp-registry-') as directory:
@@ -25,6 +48,9 @@ async def probe(binary, model, output):
             f'[mcp_servers.agent_own]\ncommand = "{repo}/bin/inbox-mcp-vol"\n'
             f'env = {{ INBOX_MESSAGE_DIR = "{root}/inbox/messages", INBOX_LANE = "mail" }}\n'
             '[mcp_servers.agent_off]\ncommand = "/nonexistent"\nenabled = false\n')
+        env = {**os.environ}
+        if chatgpt:
+            env = chatgpt_login(root / 'codex-home')
         servers = {}
         for name, tree, lane in [('inbox', 'inbox', 'mail'), ('delegation', 'peer', 'peer')]:
             servers[name] = {'command': str(repo / 'bin/inbox-mcp-vol'), 'required': True,
@@ -38,7 +64,7 @@ async def probe(binary, model, output):
                 'AMAP_SELF': 'synthetic@example.invalid'}}
         config = {'mcp_servers': servers, 'model_reasoning_effort': 'low'}
         delivery = AppServerDelivery(AppServerClient([binary, 'app-server', '--listen', 'stdio://'],
-            expected_version=build, env={**os.environ, 'CODEX_HOME': str(root / 'codex-home')}),
+            expected_version=build, env={**env, 'CODEX_HOME': str(root / 'codex-home')}),
             model=model, cwd=str(root), sandbox='read-only', approval_policy='never',
             instructions='Synthetic startup only. No model turn or submission is authorized.', trusted_config=config)
         try:
@@ -50,6 +76,7 @@ async def probe(binary, model, output):
                 'user_agent': delivery.client.initialize_result.get('userAgent'),
                 'thread_created': True, 'exact_server_and_tool_registry': True,
                 'agent_servers_switched_off': delivery.disabled_servers,
+                'chatgpt_login': chatgpt,
                 'inference': False, 'submissions': 0}
             Path(output).write_text(json.dumps(evidence, indent=2) + '\n')
             print(json.dumps(evidence))
@@ -62,5 +89,7 @@ if __name__ == '__main__':
     parser.add_argument('--binary', default='codex')
     parser.add_argument('--model', required=True)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--chatgpt-login', action='store_true',
+                        help='a synthetic ChatGPT login, offline: Codex then adds codex_apps')
     args = parser.parse_args()
-    asyncio.run(probe(args.binary, args.model, args.output))
+    asyncio.run(probe(args.binary, args.model, args.output, args.chatgpt_login))
