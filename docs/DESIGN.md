@@ -1,9 +1,10 @@
 # AMAP Codex Connector Implementation Design
 
-Status: proposed v0.1 reference implementation  
-Date: October 6, 2026  
-Proposed repository: `proofpoint/amap-connector-codex`  
-Suggested repository location for this document: `docs/DESIGN.md`
+Status: v0.1 reference implementation; in-environment pilot demonstrated
+
+Repository: `proofpoint/amap-connector-codex`
+
+Compatibility evidence: `compatibility/README.md`
 
 ## 1. Decision and delivery target
 
@@ -70,8 +71,13 @@ Three small compatibility patches belong in the initial port. Replace Claude-spe
 ```mermaid
 flowchart TD
     R["Trusted AMAP runtime and router"] -->|publish| F["Per-agent AMAP filesystem"]
-    F -->|read notices| S["Host supervisor and journal"]
-    S -->|stdio through sandbox launcher| C["Codex app-server in isolated agent"]
+    subgraph E["Agent isolation environment: live supervision model"]
+        S["Supervisor and delivery journal"]
+        C["Codex app-server"]
+        M["Read and submit MCP processes"]
+    end
+    F -->|read notices| S
+    S -->|local child, stdio| C
     C -->|local MCP calls| M["Read and submit MCP processes"]
     F -->|read-only inbound mounts| M
     M -->|write request| O["Outbound drop box"]
@@ -80,15 +86,30 @@ flowchart TD
     Q -->|read through MCP| M
 ```
 
-The supervisor runs outside the agent's execution boundary under a dedicated host identity. It owns the process pipes, delivery state, locks, and target thread binding. It has no mail credentials and does not send mail. The router alone retains those capabilities.
+The live model places the supervisor inside the isolation environment (§1.1).
+It owns the app-server pipes, delivery state, locks and target thread binding,
+and reuses the environment's Codex authentication. The agent can reach its own
+delivery journal and claims. Neither the supervisor nor the model has mail
+credentials or sending authority; the router retains those capabilities.
 
-A deployment-owned launcher enters or starts the isolated agent and runs app-server in its foreground. For an existing container, this can be a controlled `docker exec -i` invocation; for another isolation system, supply an equivalent launcher. The supervisor receives an explicit argument vector and never constructs a shell command from message content. Use pipes, not a PTY. Launcher diagnostics go to stderr; stdout carries only app-server protocol frames. Closing/stopping the launcher must terminate the actual app-server and its children, not leave an orphan consuming the thread.
+The default launcher runs app-server as a direct local child. The deferred
+host-side model (§1.2) supplies a deployment-owned launcher and, for remote
+execution, the optional generic inspect/stop contract. The supervisor receives
+an explicit argument vector and never builds a shell command from message
+content. Use pipes, not a PTY. Diagnostics go to stderr; stdout contains only
+app-server protocol frames. Remote adapters must prove cleanup of the exact
+execution and all descendants after launcher death.
 
-The launcher and container lifecycle are deployment concerns. The repository supplies one working example for the chosen pilot environment. The model cannot access the launcher, host control socket, supervisor journal, or container engine. Do not mount the Docker socket into the agent.
+Isolation lifecycle is a deployment concern. The Compose example is optional
+and has not been demonstrated live. The agent must not receive a host control
+socket or container engine. Agent-inaccessible supervisor state is a property
+of the optional host-side model, not of the demonstrated in-environment model.
 
 ### Mount and permission contract
 
-Host paths and sandbox paths may differ. Both must be explicit in deployment configuration; never derive host paths from an agent-provided path.
+Paths must be explicit in deployment configuration and visible where their
+consumer runs. Host-side supervision can use different host and sandbox paths;
+never derive a privileged host path from agent-provided data.
 
 | Resource | Router | Supervisor | Isolated agent and MCP tools |
 | --- | --- | --- | --- |
@@ -99,8 +120,8 @@ Host paths and sandbox paths may differ. Both must be explicit in deployment con
 | Submission `results` and `processed` views | Write | No write | Read-only; include the paths the imported tool uses |
 | Runtime roster | Write | No write | Read-only |
 | Connector binaries and operator workflow configuration | Deployment writes | Read | Read-only |
-| Supervisor journal, consumer claims, target binding | No write except agreed claim ownership mechanics | Read/write | Not mounted |
-| Connector outcome extension | Read/consume by agreement | Write | Not mounted in the pilot |
+| Supervisor journal, consumer claims, target binding | No write except agreed claim ownership mechanics | Read/write | Reachable in-environment; outside agent mounts for host-side supervision |
+| Connector outcome extension | Read/consume by agreement | Write | Agent-reachable in-environment; claims only, never runtime authority |
 | Agent working directory | No access required | No access required | Read/write |
 | Codex runtime state and authentication | Provisioned separately | Accessible through the selected launch/session mechanism | Per existing Codex deployment requirements |
 
@@ -128,7 +149,7 @@ Use Python 3.11 or later for new supervisor code, with `asyncio`, `sqlite3`, and
 | `src/amap_codex/supervisor.py` | Scan, queue, dispatch, and restart orchestration |
 | `src/amap_codex/outcomes.py` | Optional configured router outcome side channel |
 | `src/amap_codex/cli.py` | `run`, `doctor`, `status`, and explicit recovery commands |
-| `config/connector.example.toml` | Host supervisor configuration |
+| `config/connector.example.toml` | Supervisor configuration for the selected execution environment |
 | `config/codex.example.toml` | Sandbox-local MCP registration and selected permissions |
 | `config/operator-instructions.md` | Trusted mailbox workflow, deployed read-only |
 | `deploy/` | One pilot launcher and mount example |
@@ -186,10 +207,10 @@ Define the following supervisor configuration independently of Codex's TOML:
 | `instance_id` | Stable deployment identity; part of event keys |
 | `self_address` | Operator-supplied bare addr-spec; required with peer lane |
 | `launch_argv` | Explicit trusted launcher argument vector |
-| `mail_notice_dir`, `mail_message_dir` | Explicit host paths for enabled mail lane |
-| `peer_notice_dir`, `peer_message_dir` | Explicit host paths for enabled peer lane |
+| `mail_notice_dir`, `mail_message_dir` | Explicit supervisor-visible paths for enabled mail lane |
+| `peer_notice_dir`, `peer_message_dir` | Explicit supervisor-visible paths for enabled peer lane |
 | `mail_claim_path`, `peer_claim_path` | Existing canonical claim locations for those spools |
-| `state_dir` | Private host directory for SQLite and target binding |
+| `state_dir` | Mode `0700` supervisor state retained across restarts; accessibility follows §1.1 or §1.2 |
 | `outcome_dir` | Explicit optional extension path understood by the router |
 | `codex_model`, sandbox working directory, permission profile | Explicit deployment choices; validate against installed build |
 | `poll_interval_ms` | Initial default 1,000; use polling to avoid watcher dependencies |
@@ -197,7 +218,11 @@ Define the following supervisor configuration independently of Codex's TOML:
 | `rpc_timeout_seconds` | Initial default 30; timeout after dispatch is uncertain |
 | `turn_watchdog_seconds` | Initial default 900; surface blocked/long-running work, never replay it automatically |
 
-All path errors fail at startup. Persist a fingerprint of instance identity, roots, and target settings; require an explicit migration/reset if a restart changes them. Do not reuse a journal for another mailbox or silently bind it to a new thread.
+All path errors fail at startup. Persist a fingerprint of instance identity,
+roots and trusted configuration; use explicit `migrate` for a reviewed
+configuration change while retaining the journal. Do not reset delivery state
+to bypass uncertainty, reuse a journal for another mailbox or silently replace
+its thread. Build/model changes are audited separately (§11).
 
 ## 7. Session lifecycle and first integration gate
 
@@ -281,7 +306,10 @@ Reuse descriptor handling, explicit byte access, content-reference binding, cont
 
 ## 9. Durable state and delivery semantics
 
-Use SQLite in the supervisor's private host state directory, with transactions and an appropriate durable synchronous setting. Keep event state independent from files consumed or deleted by the router.
+Use SQLite in the supervisor's state directory, with transactions and an
+appropriate durable synchronous setting. State accessibility follows the
+selected supervision model (§1.1, §1.2). Keep event state independent from files
+consumed or deleted by the router.
 
 Suggested tables:
 
@@ -332,7 +360,12 @@ The peer profile requires that the connector not cause a message to be acted on 
 
 Reuse the canonical spool claim locations and compatible upstream claim semantics. A Codex-specific lock at a different path would allow Claude and Codex to consume the same spool simultaneously. All consumers of a spool must contend on the same claim.
 
-Run the supervisor in the host PID namespace expected by the claim helper, or explicitly validate/adapt liveness checks. A lock helper using `/proc` cannot safely infer liveness across unrelated PID namespaces. Acquire all enabled lane claims before accepting work; release acquired claims if later startup steps fail. Install termination handling before acquisition. Never reclaim an ambiguous live owner automatically.
+In the direct-launch model, consumers of a spool must share the PID/liveness
+domain used by the claim helper. Container claims are not host PID claims.
+Host-side remote adapters use the explicit owner/execution binding contract;
+`/proc` alone cannot establish remote liveness. Acquire all enabled lane claims
+before accepting work and release partial acquisitions on startup failure.
+Never automatically reclaim an ambiguous live owner.
 
 The upstream delivery outcome vocabulary is a connector/deployment convention, not a normative AMAP peer artifact. `outbound/ext/<name>` is an opaque extension path that a router may consume by agreement. [S1–S3]
 
@@ -349,7 +382,9 @@ Do not fabricate `denied` from an unrelated shell approval refusal or map every 
 
 Retain the upstream outcome file shape where the router expects it: `outcome`, `ts`, `tree`, `notice_id`, and bounded `detail`. The router may remove outcome files after reading them. Keep transition history in SQLite and publish atomically. Confirm repeated publication is safe with the actual router; outcome recovery must not use absence of a file as proof that a transition was never consumed.
 
-Even though the pilot keeps outcome files outside the agent mount, the router must continue treating them as connector claims rather than proof or new authorization. The AMAP runtime remains the security authority.
+Outcome files are connector claims rather than proof or new authorization,
+including when the agent can reach them in the in-environment model. The AMAP
+runtime remains the security authority.
 
 ## 11. Approvals and operational behavior
 
@@ -358,6 +393,16 @@ The supervisor must respond to or explicitly resolve server-initiated requests. 
 For the headless pilot, provision an explicit narrow permission profile covering required workspace operations and MCP tools. When additional approval is requested, decline/cancel using the pinned protocol, record the blocked operation, and surface it in status. For a request requiring user input, use the supported cancellation path or interrupt the turn. Do not invent answers or auto-approve to keep the daemon running. An operator can revise policy or handle the task through an explicit recovery workflow.
 
 Status must include instance identity, bound thread, enabled lanes, claim state, current turn, pending count, oldest pending age, uncertain count, last successful acceptance, and last operational error. Log stable event/notice IDs and state transitions; exclude message bodies, attachment bytes, and credentials by default.
+
+Clean startup reconciliation clears a resolved operational diagnostic and
+retains its previous value in the audit. Unresolved history, operator work,
+client errors or outcome publication keep their diagnostic; clearing an error
+does not alter delivery or publication state.
+
+Developer instructions stay fixed at thread start on the reviewed builds.
+Changing them requires explicit migration to a new thread on the kept journal,
+with no in-flight/uncertain work. Build and model changes are audited while
+preserving the existing delivery state and thread.
 
 On graceful shutdown, stop admitting new dispatches, allow a bounded period for the active turn, then interrupt/stop through the verified lifecycle. Persist final known state, reap the launched process, and release claims. If acceptance remains unresolved, leave the event uncertain. On startup, detect orphaned sandbox processes before starting a second controller.
 
@@ -371,7 +416,7 @@ Run deterministic tests on every change and live tests only where they exercise 
 | --- | --- |
 | Imported reader and submit regression suite | Existing signatures and attachment constraints preserved; intentional metadata/version changes have targeted expectations |
 | Read-only input mounts | Agent can read; attempted writes, renames, chmod-based mutation, and symlink substitution cannot alter runtime input |
-| Namespace isolation | Agent cannot read another mailbox, host journal, router credentials, or container control endpoint |
+| Namespace isolation | Agent cannot read another mailbox, router credentials or container control endpoint; host-side supervision additionally protects its journal, while §1.1 permits access to the agent's own delivery state |
 | Wire compatibility | Imported fixture/version rules pass, including tolerated unknown runtime members |
 | Peer admission | Wrong recipient, wrong tree/kind, malformed sender, and router-origin task attempts refused |
 | Distinct correlation IDs | Local read uses notice ID; reply correlates using the required peer message ID |

@@ -149,7 +149,8 @@ class Supervisor:
                 self._record_process(os.getpid(), None)
             thread_id = await self.delivery.start_or_resume(self.journal.thread_id)
             self.journal.bind_thread(thread_id)
-            await self.reconcile()
+            if await self.reconcile() and not self.delivery.client.last_error:
+                self.journal.clear_operational_error()
             self.write_status()
         except BaseException:
             await self.close()
@@ -157,6 +158,7 @@ class Supervisor:
 
     async def reconcile(self):
         events = self.journal.recovery_events()
+        clean = True
         # Even an empty ledger must not dispatch onto a resumed externally active thread.
         try:
             history = await self.delivery.observe()
@@ -164,7 +166,7 @@ class Supervisor:
             self.journal.operational_error("thread history unavailable; dispatch paused")
             if not events:
                 raise RuntimeError("cannot establish bound thread is idle")
-            return
+            return False
         turns = history.get("thread", {}).get("turns", [])
         known_turns = {e["turn_id"] for e in events if e["turn_id"]}
         for event in events:
@@ -184,6 +186,7 @@ class Supervisor:
                     self.active_since = time.monotonic()
             else:
                 self.journal.operational_error("acceptance/execution cannot be reconciled from original input; dispatch paused")
+                clean = False
         for operator in self.journal.operator_runs(recovery=True):
             match = find_operator(history, operator['run_id'])
             if match and match[2] == operator['instruction_hash']:
@@ -197,8 +200,10 @@ class Supervisor:
                     self.active_since = time.monotonic()
             else:
                 self.journal.operational_error('operator dispatch unresolved; automatic work paused')
+                clean = False
         if any(t.get("status") == "inProgress" and t.get("id") not in known_turns for t in turns):
             raise RuntimeError("bound thread has an unowned active turn")
+        return clean
 
     def scan(self):
         counts = self.journal.status()["counts"]

@@ -258,6 +258,20 @@ class Journal:
         with self._transaction():
             self.db.execute("UPDATE instance SET last_error=?", (str(detail)[:200],))
 
+    def clear_operational_error(self):
+        """Retire a resolved diagnostic after the controller reconciles cleanly.
+
+        Publication uncertainty is independent of thread recovery and still
+        needs router evidence. Preserve the diagnostic until that is resolved.
+        """
+        with self._transaction():
+            if self.db.execute("SELECT 1 FROM outcome_transitions WHERE publication_state IN ('publishing','ambiguous') LIMIT 1").fetchone():
+                return
+            row = self.db.execute("SELECT last_error FROM instance WHERE instance_id=?", (self.instance_id,)).fetchone()
+            if row["last_error"] is not None:
+                self._audit(None, "operational_error_cleared", row["last_error"])
+                self.db.execute("UPDATE instance SET last_error=NULL WHERE instance_id=?", (self.instance_id,))
+
     def operator_blocked(self):
         return self.db.execute("SELECT 1 FROM operator_runs WHERE state IN ('dispatching','accepted','uncertain') LIMIT 1").fetchone() is not None
 
