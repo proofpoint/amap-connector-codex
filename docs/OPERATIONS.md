@@ -115,7 +115,7 @@ thread to bypass an uncertain event.
 | --- | --- |
 | Config load fails | Confirm all paths are explicit, absolute, existing where required, and point to this one namespace. Confirm state ownership/mode is private and the instructions file is not group/world writable. |
 | Claim held | Find the existing supervisor/consumer and let it release the canonical claim. For controlled isolation, use positive runtime cleanup and retain the binding. For direct launches, inspect the local process group. A dead host PID alone never clears remote ownership. |
-| App-server cannot start | Confirm `codex --version` is exactly `codex-cli 0.160.1`, the image has Codex auth and the selected model is available, and launcher stdout contains only app-server JSONL. Check launcher stderr for diagnostics. |
+| App-server cannot start | Confirm `codex --version` prints the configured `codex_version`, the image has Codex auth and the selected model is available, and launcher stdout contains only app-server JSONL. Check launcher stderr for diagnostics. |
 | Required MCP initialization fails | Check the three paths, environment values, and read-only mounts inside the container. `results/` and `processed/` must exist under the configured drop box and be mounted read-only over its writable parent. |
 | Peer notice is refused | Review the sanitized reason and check wire major `2`, notice/body filename binding, `kind=peer`, sender address, `message.mailbox=peer`, and body `to` against configured `self_address`. |
 | Body temporarily unavailable | The scanner waits through `publication_grace_seconds`; compare this with the router's actual publish ordering and adjust only after testing that contract. A later permanent refusal means the body was not available within the configured grace. |
@@ -171,7 +171,7 @@ Reusing an ID with the same input is idempotent; changed content is refused.
 Unknown dispatch blocks all further work and is never automatically replayed.
 recover-operator RUN_ID --action hold|handled --note NOTE records an audit entry;
 handled retires an unresolved run without sending it again. No kickoff retry action exists.
-Use the [operator runbook](OPERATOR-RUNBOOK.md) for the reviewed pilot adapter.
+For the Sandy deployment, see [SANDY.md](SANDY.md).
 
 ## Changing the configuration of a running instance
 

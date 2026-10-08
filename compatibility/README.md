@@ -1,8 +1,8 @@
 # Codex compatibility evidence
 
-Reference target: **codex-cli 0.160.1**, Linux aarch64, inspected October 6,
-2026. This is a pilot implementation; the isolated deployment release gate
-remains open.
+First reviewed build: **codex-cli 0.160.1**, Linux aarch64, inspected October
+6, 2026; 0.161.0 is reviewed below. The live Sandy deployment is described in
+[docs/SANDY.md](../docs/SANDY.md).
 
 The installed binary generated the committed protocol subset with
 `codex app-server generate-json-schema --out DIRECTORY`.

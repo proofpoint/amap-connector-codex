@@ -5,13 +5,13 @@ thread from validated AMAP mail or peer notices. The isolated agent reads
 from local MCP servers and can create outbound requests in the runtime's
 drop box. The runtime remains responsible for policy and sending.
 
-This is a pilot/reference implementation. Codex app-server is experimental.
-The selected compatibility target is `codex-cli 0.160.1`. A live host probe
-verified authenticated tool-output delivery, an MCP message read, turn completion,
-and inspection of original input after resume. The actual mailbox router and
-container isolation have not been exercised together. The Compose example is
-provided for review and is not evidence of a completed live sandbox test.
-See [compatibility/README.md](compatibility/README.md) for evidence and release gates.
+This is a reference implementation, and Codex app-server is experimental.
+It runs in a live Sandy fleet with the real router: a Codex agent delegates to
+and answers Claude agents in both directions ([docs/SANDY.md](docs/SANDY.md)).
+The reviewed Codex builds are `codex-cli 0.160.1` and `0.161.0`; any build
+runs, and delivery relies on live checks. The Compose example is provided for
+review and has not been run as a live deployment. See
+[compatibility/README.md](compatibility/README.md) for the evidence.
 
 ## Install
 
@@ -26,8 +26,8 @@ python -m pip install .
 codex --version
 ```
 
-The installed Codex version must be exactly `codex-cli 0.160.1` for the
-supervisor config. Provision Codex authentication through the deployment's
+Set the supervisor's `codex_version` to what `codex --version` prints; the
+launched app-server must report that build. Provision Codex authentication through the deployment's
 existing mechanism. The agent needs Codex model access; it must not receive
 mail-provider or router credentials.
 
@@ -73,19 +73,26 @@ the event becomes uncertain and automatic dispatch pauses for the instance.
 
 See [docs/OPERATIONS.md](docs/OPERATIONS.md) before using recovery commands.
 
-For a dedicated Codex sandbox in an existing Sandy fleet, follow the
-[rollout plan and repository handoffs](docs/ROLLOUT.md). The connector keeps a
-generic launcher interface; Sandy-specific discovery, mounts and host services
-belong to the deployment adapter.
+For a Codex sandbox in a Sandy fleet, use
+[amap-deploy-sandy](https://github.com/proofpoint/amap-deploy-sandy), which runs
+this supervisor inside the sandbox; see [docs/SANDY.md](docs/SANDY.md). The
+connector keeps a generic launcher interface: Sandy-specific discovery, mounts
+and configuration belong to the deployment adapter.
 
 ## Trust and sending
 
-Mail and attachments are untrusted content. A peer notice's authenticated
-sender is runtime-asserted, but the request does not expand the agent's
-authority. Peer replies use the wake-up's validated `peer_from` as `to` and
+The operator instructions ([config/operator-instructions.md](config/operator-instructions.md))
+are the AMAP fleet's inbox policy. Mail and delegations are requests meant to
+be acted on, within the authority the agent already has, and a reply to the
+sender needs no permission. A peer's identity is runtime-asserted; what it
+quotes, forwards or attaches is untrusted data. Where the router's guarantee
+does not reach (credentials, network, irreversible or off-host changes), the
+agent does not act and tells the sender it needs the operator.
+
+Peer replies use the notice's validated `peer_from` as `to` and
 `peer_message_id` as `in_reply_to`. The local `notice_id` only locates the
-receiver's spool file; these IDs are not interchangeable. Peer results are
-consumed into ongoing work without automatic acknowledgments.
+receiver's spool file; these IDs are not interchangeable. Results are consumed
+into ongoing work without automatic acknowledgments.
 
 `inbox_submit.submit` writes an inert request; it does not send. The agent
 must call `submit_result` and report a send only when the runtime says the
@@ -100,8 +107,8 @@ and cover reader, submit, claims, and attachment behavior. Live Codex and
 router acceptance checks are separate deployment tests and are not inferred
 from CI.
 
-Codex MCP and sandbox settings in `config/codex.example.toml` use the installed
-0.160.1 CLI's `mcp_servers`, `enabled_tools`, `required`, `workspace-write`,
+Codex MCP and sandbox settings in `config/codex.example.toml` use the Codex
+CLI's `mcp_servers`, `enabled_tools`, `required`, `workspace-write`,
 and sandbox network settings. See the official [MCP configuration guide](https://developers.openai.com/codex/mcp)
 and [configuration reference](https://developers.openai.com/codex/config-reference).
 The exact AMAP tool allowlists have `default_tools_approval_mode = "approve"`;
@@ -114,16 +121,13 @@ Run deterministic checks with `python -m pip install -e '.[test]'`, then
 ## Current limitations
 
 - One namespace, one supervisor, and one persistent Codex thread per instance.
-- The real router, mailbox retention/publish ordering, isolated Codex login, and
-  isolation launcher remain deployment-specific integration gates.
-- The proposed `outbound/ext/codex/outcomes` path is optional and must be
-  confirmed with the router owner before enabling it.
+- Deployments other than Sandy (the Compose example, launcher control) have
+  not been run live.
+- The `outbound/ext/codex/outcomes` path is consumed by a router configured
+  for it (amap-router-local's `connector_outcome_ids`).
 - The connector has no UI for approvals, interrupted work, or recovery.
 - This pilot does not provide exactly-once model execution or exactly-once
   outbound effects, a cloud service, remote MCP, or native MCP Events.
 
-The [operator runbook](docs/OPERATOR-RUNBOOK.md) prepares one dedicated sandbox
-through a deployment adapter. [Launcher control v1](docs/contracts/LAUNCHER-CONTROL.md)
-and host-private operator kickoffs are optional; direct local launch remains supported.
-See [engineering verification](docs/ENGINEERING-VERIFICATION.md) for integration PRs
-and the live host gates still pending.
+[Launcher control v1](docs/contracts/LAUNCHER-CONTROL.md) and operator kickoffs
+are optional; direct local launch remains supported.

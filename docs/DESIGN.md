@@ -31,7 +31,7 @@ Revisit it when any of these holds:
 2. A requirement appears that an agent must not be able to tamper with its own delivery state, such as an audit or compliance need.
 3. Agents are to be started on demand for incoming work, rather than delivered to only while an operator-launched session runs.
 
-**Release gate:** prove the selected Codex build supports the required app-server behavior on day one. This is a design, not a tested Codex integration. Official documentation currently labels app-server experimental; pin a tested build and describe v0.1 as a reference/pilot release rather than a production support commitment. [S4]
+**Status:** the required app-server behavior is measured on the reviewed builds (`compatibility/README.md`), and the Sandy deployment has carried delegations in both directions with the real router (`docs/SANDY.md`). Official documentation labels app-server experimental, so this is a reference release rather than a production support commitment; any build runs, and delivery relies on the live checks. [S4]
 
 ## 2. Scope
 
@@ -57,7 +57,7 @@ Pin the initial import to these reviewed source revisions:
 | --- | --- | --- |
 | `proofpoint/amap-connector-claude` | `ca9b40647c5c002e6e6fe30b4fea54e64a76af57` | MCP tools, consumer claims, admission behavior, tests |
 | `proofpoint/amap-spec` | `2ffdfeb06631329fad3678788d03e854c92ba98b` | Filesystem contract, schemas, peer profile, fixtures |
-| Codex | Record exact version during day-one spike | Generated protocol schema and live compatibility evidence |
+| Codex | Reviewed builds in `REVIEWED_CODEX_VERSIONS` | Generated protocol schema and live compatibility evidence |
 
 The AMAP specification release label and the `contract_version` inside artifacts are different version axes. The pinned artifacts use wire major `"2"`; do not replace that value with `"3.1.0"`. Follow each artifact's version and extension rules. Runtime-authored extensible documents must tolerate unknown members where the contract requires it; closed submit schemas must remain closed. [S2, S3]
 
@@ -223,7 +223,7 @@ The supervisor owns the thread for its lifetime. It does not discover a target b
 
 ### Input representation
 
-Use standalone tool output for connector event data when verified by the day-one gate. The fixed source name belongs to the connector, not to a sender. The following illustrates the adapter envelope; the exact request shape must match the pinned schema:
+Use standalone tool output for connector event data as verified by the compatibility probes. The fixed source name belongs to the connector, not to a sender. The following illustrates the adapter envelope; the exact request shape must match the pinned schema:
 
 ```json
 {
@@ -251,7 +251,7 @@ Deploy the operator workflow through the pinned build's supported instruction me
 
 ### Mail lane
 
-Scan the runtime-owned mail notice tree without modifying it. Check the wire version before schema validation, accepting only supported major `"2"`; classify other versions or absence as a distinct version refusal. Validate shape, safe identifier, filename binding, and the mail lane's `kind == deliver` requirement. Apply the corresponding version gate when reading published bodies. The event contains no subject, preview, sender text, or body. The agent retrieves the message through the mail reader and treats it as untrusted data under its standing task. A mail message cannot grant permission to execute its instructions or send a reply.
+Scan the runtime-owned mail notice tree without modifying it. Check the wire version before schema validation, accepting only supported major `"2"`; classify other versions or absence as a distinct version refusal. Validate shape, safe identifier, filename binding, and the mail lane's `kind == deliver` requirement. Apply the corresponding version gate when reading published bodies. The event contains no subject, preview, sender text, or body. The agent retrieves the message through the mail reader. Mail is from a peer on both sides of the operator's mutual allowlist, and its requests are meant to be acted on within the agent's existing authority (the operator instructions are the fleet's inbox policy); what it quotes, forwards or attaches remains untrusted data.
 
 Deliver one notice at a time initially; do not add batching/coalescing until the basic path is measured. Include the notice ID to avoid repeated full-inbox scans. A duplicate filesystem scan must not start another turn for an already accepted event.
 
@@ -265,7 +265,7 @@ Port the current connector's admission checks before dispatch:
 - Refuse router-origin task attempts according to the existing connector convention.
 - Require a readable published body with expected fields. Do not fall back to a mail provider or another tree.
 
-Use the runtime's authenticated peer identity while preserving the existing limitation: a peer request grants no authority beyond the receiving agent's own scope. Quoted/forwarded text and attachments remain untrusted. No AV, DLP, or prompt-injection scanning is added by this connector.
+Use the runtime's authenticated peer identity. A delegation is the operator's grant: its requests are meant to be acted on, within the receiving agent's existing authority, and a reply to the sender needs no permission. Where the router's guarantee does not reach (credentials, network outside the message path, irreversible or off-host changes) the agent does not act and tells the sender it needs the operator. Quoted/forwarded text and attachments remain untrusted. No AV, DLP, or prompt-injection scanning is added by this connector.
 
 Handle a malformed artifact as a recorded refusal/error for that notice, with an operator-visible reason; continue scanning other notices. Distinguish transient incomplete publication from permanently invalid data using the runtime's actual publish-order guarantee established in the pilot. Do not permanently refuse a body merely because the router has not finished publishing it; use a bounded grace/retry state if publication is not atomic across notice and body.
 
@@ -393,39 +393,7 @@ Run deterministic tests on every change and live tests only where they exercise 
 
 The release demonstration is a real-router peer round trip inside the actual sandbox, followed by a supervisor restart, duplicate scan, and a deliberately interrupted dispatch. A fake app-server proves controller logic; it does not satisfy the live compatibility gate.
 
-## 13. Three day implementation plan
-
-### Day 1 — Prove the session and filesystem boundary
-
-- Scaffold the package, vendor pinned tools/tests, and record provenance.
-- Build the one pilot launcher and required mounts.
-- Generate the installed Codex protocol schema and implement a minimal stdio client.
-- Complete initialization, tool startup, event-triggered turn, and thread resume.
-- Verify instruction delivery, approval behavior, stdout purity, and read-only mounts.
-
-**Exit:** one synthetic notice causes the isolated Codex agent to fetch a local AMAP message. Record the tested version and whether standalone tool output or the bounded wake-up fallback was used. Resolve this before building the full daemon.
-
-### Day 2 — Complete the AMAP path
-
-- Port notice admission, canonical claims, and lane-specific behavior.
-- Add SQLite event/attempt state, serial queueing, and target binding.
-- Implement submit/result workflow and distinct-ID reply fixture.
-- Wire the configured outcome extension into the target router.
-- Demonstrate one real peer request and gated reply, including a local attachment.
-
-**Exit:** end-to-end peer round trip plus mail doorbell; no mail credentials in the isolated agent; no automatic forwarding of the final assistant message.
-
-### Day 3 — Make failure behavior explicit
-
-- Add the fake app-server fault cases and restart recovery.
-- Verify contention, burst backlog, approval handling, and subprocess cleanup.
-- Implement `doctor`, `status`, and explicit uncertain-event recovery.
-- Complete quickstart, operations guide, compatibility record, and CI.
-- Run the release demonstration and publish a v0.1 reference release through the normal repository process.
-
-**Exit:** all acceptance tests relevant to enabled features pass. Any unsupported feature is disabled and documented. Reserve day four for app-server or router integration findings; do not spend it implementing cloud events or UI features.
-
-## 14. Future network facade
+## 13. Future network facade
 
 The AMAP filesystem remains on operator-controlled infrastructure. A future authenticated MCP service reads that filesystem and writes gated requests locally; remote agents receive tool results. A notice worker delivers MCP Events to the hosted agent. Work Cloud and dots do not mount or synchronize the AMAP directories.
 
@@ -443,26 +411,6 @@ Later work will add authenticated principal-to-namespace binding, remote tool tr
 Do not carry local path arguments into the remote API: outbound attachments will require upload handles or a scoped byte-transfer mechanism. Revisit idempotent submission before enabling retry-heavy remote workflows. Do not share a single consumed-event flag across independent subscribers; separate source event identity from per-subscription delivery state and define whether multiple subscribers may act on a mailbox.
 
 The local pilot can therefore ship without a web server, OAuth implementation, subscription database, or cloud dependency. Its AMAP operations and delivery boundary become the foundation of the later facade.
-
-## 15. Bootstrap instructions for the implementation agent
-
-Use the following as the first workspace task:
-
-> Implement v0.1 of `amap-connector-codex` from `docs/DESIGN.md`. Preserve the AMAP filesystem contract and isolated-agent mount arrangement. Begin with the day-one live compatibility gate using the actual installed Codex build and the existing sandbox launcher. Vendor the generic tools and relevant tests from the pinned Claude connector revision with license and provenance. Build the smallest Python supervisor that owns one Codex app-server over stdio, binds one persistent thread, and starts serial work from validated notice pointers. Keep mail/peer trust framing, canonical consumer claims, gated outbound submission, and distinct notice/message correlation IDs. Add a durable journal and stop on uncertain delivery rather than replaying it. Implement the deterministic fault tests and the real-router acceptance demonstration. Do not implement remote MCP Events, a network facade, UI, multi-tenancy, a shared cross-repository package, or a new router. Record compatibility evidence and remaining limitations before declaring the reference implementation ready.
-
-Resolve these deployment facts during day one, using the existing host configuration rather than guessed defaults:
-
-| Fact | Decision needed |
-| --- | --- |
-| Sandbox technology and launcher | Exact controlled invocation and process-cleanup behavior |
-| Namespace roots and mounts | Real host/sandbox mapping, including sidecars and result/processed trees |
-| Router extension support | Configurable Codex outcome path or minimal required integration change |
-| Claim locations | Same locks used by current consumers; compatible PID/liveness interpretation |
-| Codex version and account/model | Tested binary, authenticated launch, accessible model |
-| Instruction and permission provisioning | Supported pinned-build configuration, read-only deployment, blocked-request behavior |
-| Runtime publish ordering and retention | Admission retry rule and maximum tolerable backlog/outage |
-
-If one fact blocks the main path, document the smallest bounded adjustment and its test. Keep the three-day scope intact.
 
 ## Sources
 

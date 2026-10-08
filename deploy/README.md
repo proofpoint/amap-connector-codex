@@ -1,7 +1,7 @@
 # Compose deployment example
 
 This is a mount and process-lifecycle example for one isolated Linux Codex
-agent. It requires a deployment-built image with Codex CLI `0.160.1`, Python
+agent. It requires a deployment-built image with a Codex CLI build, Python
 3.11 or later, and the local `codex` executable. The host-side supervisor
 launches a named one-off container through `launch-app-server.sh`. The
 launcher attaches stdin/stdout for the JSONL protocol and explicitly stops
@@ -16,7 +16,7 @@ ignores this path:
 
 | Variable | Required source |
 | --- | --- |
-| `AMAP_CODEX_IMAGE` | Pinned image containing Codex CLI 0.160.1, Python 3.11+, and an agent-owned `/codex-home` directory |
+| `AMAP_CODEX_IMAGE` | Pinned image containing a Codex CLI build (reviewed: 0.160.1, 0.161.0), Python 3.11+, and an agent-owned `/codex-home` directory |
 | `AMAP_AGENT_UID`, `AMAP_AGENT_GID` | Dedicated unprivileged container identity |
 | `AMAP_CONNECTOR_ROOT` | Deployed connector root; only its `bin/` is mounted read-only |
 | `AMAP_CODEX_CONFIG` | Deployed read-only `config/codex.example.toml` after replacing the model/self placeholders |

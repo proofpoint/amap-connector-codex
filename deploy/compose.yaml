@@ -4,7 +4,7 @@
 # sources are documented in README.md. No Docker socket is mounted here.
 services:
   agent:
-    image: ${AMAP_CODEX_IMAGE:?Set an image containing codex-cli 0.160.1 and Python 3.11+}
+    image: ${AMAP_CODEX_IMAGE:?Set an image containing codex-cli and Python 3.11+}
     user: ${AMAP_AGENT_UID:?Set the isolated agent uid}:${AMAP_AGENT_GID:?Set the isolated agent gid}
     init: true
     cap_drop: [ALL]

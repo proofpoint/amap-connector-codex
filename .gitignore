@@ -12,5 +12,3 @@ state/
 codex-home/
 deploy/.env
 
-# Separate integration repositories, published through their own PRs
-integration/repos/
