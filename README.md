@@ -33,22 +33,32 @@ mail-provider or router credentials.
 
 Copy `config/connector.example.toml`, `config/codex.example.toml`, and
 `config/operator-instructions.md` to deployment-owned locations. Replace each
-`REPLACE_*` value with operator-selected settings. The host config must use
-the actual absolute host paths and existing namespace directories. The Codex
-config must use paths inside the sandbox. Keep the supervisor `state_dir`
-private (mode `0700`) and outside agent mounts. Create it before running the
-read-only `doctor` or `status` commands. Do not point separate mailboxes at one
-journal or claim file.
+`REPLACE_*` value with operator-selected settings. The supervisor config uses
+absolute paths visible where the supervisor runs; the Codex config uses paths
+visible to app-server and its MCP children. With in-environment supervision,
+both run inside the isolation environment and use its existing Codex home and
+authentication. Keep `state_dir` mode `0700` and retain it across restarts.
+This model lets the agent reach its own delivery state; the router remains the
+authority for sending. A host-side adapter instead keeps supervisor state
+outside agent mounts. Create the state directory before running the read-only
+`doctor` or `status` commands. Do not share a journal across mailboxes.
+
+The connector example selects the optional host-side Compose launcher. For
+in-environment supervision, set `launch_argv` to
+`["codex", "app-server", "--listen", "stdio://"]`, use environment-local paths
+and provide `trusted_config_file` with the protected AMAP MCP configuration.
 
 The Compose example is in [deploy/README.md](deploy/README.md). It requires
 explicit host directory variables and a deployment-built image. Docker is a
 host-side launcher dependency; the container does not receive a Docker socket.
-Use another deployment-owned launcher if the pilot does not use Docker, and
-make sure stopping its host process terminates the actual app-server.
+The live pilot uses a supervisor inside the isolation environment with a direct
+local app-server child. A host-side adapter must prove stopping its launcher
+terminates the actual remote app-server and its descendants.
 
 ## Start and inspect
 
-The CLI uses the host configuration explicitly:
+The CLI uses the supervisor configuration explicitly, in its execution
+environment:
 
 ```sh
 amap-codex --config /etc/amap-connector/connector.toml doctor

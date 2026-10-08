@@ -1,4 +1,6 @@
-# Host-side supervisor configuration.
+# Optional host-side/Compose supervisor example (not the live deployment model).
+# For in-environment supervision, use a direct local launch_argv, e.g.
+# ["codex", "app-server", "--listen", "stdio://"], with paths visible there.
 # Replace every /REPLACE_* path with the actual deployment path before use.
 # The Config loader checks that directories and operator instructions exist.
 

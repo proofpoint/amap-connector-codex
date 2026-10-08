@@ -1,4 +1,4 @@
-"""Privileged host-only integration kickoff. Never accepts router artifacts."""
+"""Explicit operator kickoff, independent of router artifacts."""
 import hashlib
 import json
 import os

@@ -76,6 +76,29 @@ def test_integrity_and_binding_conflicts(tmp_path):
     with pytest.raises(IntegrityConflict): Journal(tmp_path/'journal.db','instance-a','changed-settings','codex-cli 0.160.1','gpt-test')
 
 
+@pytest.mark.parametrize('publication_state', ['publishing', 'ambiguous'])
+def test_clean_thread_recovery_cannot_clear_unresolved_publication_error(tmp_path, publication_state):
+    with journal(tmp_path) as db:
+        incoming = admission()
+        db.admit(incoming)
+        db.bind_thread('thread-a')
+        db.begin_attempt(incoming.event_id, 41)
+        db.accept(incoming.event_id, 'turn-a')
+        db.finish(incoming.event_id, 'completed')
+        transition = db.pending_outcomes()[0]
+        db.publication_state(transition['id'], publication_state)
+        db.operational_error('outcome publication uncertain; router evidence required')
+        db.clear_operational_error()
+        assert db.status()['last_error'] == 'outcome publication uncertain; router evidence required'
+        assert db.pending_outcomes(include_ambiguous=True)[0]['publication_state'] == publication_state
+        # Positive publication evidence resolves the independent uncertainty.
+        db.publication_state(transition['id'], 'published')
+        db.clear_operational_error()
+        assert db.status()['last_error'] is None
+        notes = [tuple(r) for r in db.db.execute("SELECT action,note FROM audit")]
+        assert notes[-1] == ('operational_error_cleared', 'outcome publication uncertain; router evidence required')
+
+
 def test_a_codex_build_change_is_audited_and_keeps_the_instance(tmp_path):
     db = journal(tmp_path); db.admit(admission()); db.bind_thread('thread-a'); db.close()
     db = Journal(tmp_path/'journal.db','instance-a','config-fingerprint','codex-cli 0.161.0','gpt-test')

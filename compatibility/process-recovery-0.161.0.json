@@ -1,0 +1,14 @@
+{
+  "timestamp_utc": "2026-10-08T12:49:55.785621+00:00",
+  "codex_version": "codex-cli 0.161.0",
+  "scope": "real app-server/controller crash inside isolation; no sandbox restart or router attestation",
+  "runtime_identity_changed": false,
+  "same_thread": true,
+  "original_input_matches": true,
+  "operator_state": "finished",
+  "execution_status": "interrupted",
+  "new_turns_dispatched": 0,
+  "workspace_command_executions": 1,
+  "submissions": 0,
+  "passed": true
+}

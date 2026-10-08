@@ -11,6 +11,7 @@ import pytest
 from amap_codex.claims import ClaimHeld
 from amap_codex.config import Config, Lane
 from amap_codex.journal import Journal
+from amap_codex.cli import read_status
 from amap_codex.spool import Scanner, event_id
 from amap_codex.supervisor import Ownership, Supervisor
 
@@ -169,6 +170,111 @@ def test_absent_original_input_in_partial_history_holds_instance(tmp_path):
             assert supervisor.journal.next_pending() is None
             assert supervisor.journal.status()['last_error']
             assert history(config)==[]
+        finally:
+            await supervisor.close()
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize('resumed', [False, True])
+def test_clean_start_retires_stale_error_in_status_and_keeps_audit(tmp_path, resumed):
+    config = config_for(tmp_path)
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(),
+                 config.codex_version, config.codex_model) as journal:
+        if resumed:
+            journal.bind_thread('thread-fixture')
+        journal.operational_error('previous app-server disconnected')
+
+    async def check():
+        supervisor = Supervisor(config)
+        try:
+            await supervisor.start()
+            assert supervisor.journal.thread_id == 'thread-fixture'
+            assert supervisor.journal.status()['last_error'] is None
+            assert read_status(config)['last_error'] is None
+            assert json.loads((config.state_dir/'status.json').read_text())['last_error'] is None
+            notes = [tuple(r) for r in supervisor.journal.db.execute(
+                "SELECT action,note FROM audit WHERE action='operational_error_cleared'")]
+            assert notes == [('operational_error_cleared', 'previous app-server disconnected')]
+        finally:
+            await supervisor.close()
+        second = Supervisor(config)
+        try:
+            await second.start()
+            assert second.journal.db.execute(
+                "SELECT COUNT(*) FROM audit WHERE action='operational_error_cleared'").fetchone()[0] == 1
+        finally:
+            await second.close()
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize('missing_history', [False, True])
+def test_start_keeps_error_when_delivery_recovery_is_unresolved(tmp_path, missing_history):
+    config = config_for(tmp_path)
+    eid = publish(config)
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(),
+                 config.codex_version, config.codex_model) as journal:
+        journal.admit(next(Scanner().scan(config.lanes[0], config.instance_id, config.self_address)))
+        journal.bind_thread('thread-fixture')
+        journal.begin_attempt(eid, 41)
+        journal.operational_error('prior transport failure')
+
+    async def check():
+        supervisor = Supervisor(config)
+        if missing_history:
+            async def unavailable():
+                raise RuntimeError('history unavailable')
+            supervisor.delivery.observe = unavailable
+        try:
+            await supervisor.start()
+            expected = ('thread history unavailable; dispatch paused' if missing_history else
+                        'acceptance/execution cannot be reconciled from original input; dispatch paused')
+            assert read_status(config)['last_error'] == expected
+            assert supervisor.journal.event(eid)['state'] == 'uncertain'
+            assert supervisor.journal.next_pending() is None
+            assert supervisor.journal.db.execute(
+                "SELECT COUNT(*) FROM audit WHERE action='operational_error_cleared'").fetchone()[0] == 0
+        finally:
+            await supervisor.close()
+    asyncio.run(check())
+
+
+def test_start_keeps_error_when_operator_recovery_is_unresolved(tmp_path):
+    config = config_for(tmp_path)
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(),
+                 config.codex_version, config.codex_model) as journal:
+        journal.bind_thread('thread-fixture')
+        journal.admit_operator('probe-run', 'instruction-hash')
+        journal.begin_operator('probe-run', 41)
+        journal.operational_error('prior operator transport failure')
+
+    async def check():
+        supervisor = Supervisor(config)
+        try:
+            await supervisor.start()
+            assert read_status(config)['last_error'] == 'operator dispatch unresolved; automatic work paused'
+            assert supervisor.journal.operator_runs()[0]['state'] == 'uncertain'
+            assert supervisor.journal.next_pending() is None
+        finally:
+            await supervisor.close()
+    asyncio.run(check())
+
+
+def test_start_keeps_diagnostic_when_client_reports_an_error(tmp_path):
+    config = config_for(tmp_path)
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(),
+                 config.codex_version, config.codex_model) as journal:
+        journal.operational_error('previous app-server disconnected')
+
+    async def check():
+        supervisor = Supervisor(config)
+        observe = supervisor.delivery.observe
+        async def with_error():
+            supervisor.delivery.client.last_error = 'app-server protocol failure'
+            return await observe()
+        supervisor.delivery.observe = with_error
+        try:
+            await supervisor.start()
+            assert read_status(config)['last_error'] is not None
         finally:
             await supervisor.close()
     asyncio.run(check())

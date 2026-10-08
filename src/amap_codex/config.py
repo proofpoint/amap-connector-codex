@@ -1,4 +1,4 @@
-"""Explicit host configuration, independent of sandbox-local Codex TOML."""
+"""Explicit supervisor configuration, independent of Codex's own TOML."""
 from dataclasses import dataclass, asdict
 import hashlib
 import json

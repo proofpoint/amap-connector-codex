@@ -41,6 +41,39 @@ fleet:
 The deployment found the `codex_apps`, fresh-thread history and instruction
 behaviors recorded below.
 
+## Shared authentication and process recovery (0.161.0)
+
+[shared-auth-refresh-0.161.0.json](shared-auth-refresh-0.161.0.json) records two
+real app-servers using one existing managed ChatGPT login. Both requested a
+token refresh concurrently, the authentication refresh metadata changed,
+and both still reported the same account. No credentials were copied and the
+probe performed no inference or submission.
+
+[shared-auth-interactive-supervisor-0.161.0.json](shared-auth-interactive-supervisor-0.161.0.json)
+adds real actor evidence: an interactive TUI with its own app-server and an
+actual in-environment supervisor stayed running across that forced rotation.
+Both completed synthetic marker turns before and afterward; their persisted
+agent messages, not input echoes, were inspected. Neither used tools or
+submitted outbound work. This demonstrates coexistence across managed token
+rotation; it did not induce an automatic expiry-driven refresh in the TUI.
+
+[process-recovery-0.161.0.json](process-recovery-0.161.0.json) records a real
+supervisor kickoff that entered a bounded workspace command. The test killed
+its app-server group and intentionally exited its controller, retaining crash
+records, claims and journal. A new supervisor resumed the same thread, matched
+the original input and recovered its turn as interrupted. There was one
+workspace-command execution and no new dispatch across two idle cycles.
+This is **process-crash evidence within isolation**, not an entire sandbox
+restart or router test.
+
+The first workspace-command attempt under an inner `workspace-write` policy
+was denied because this environment cannot create a nested sandbox namespace;
+it was not a recovery pass. The successful disposable probe explicitly relied
+on outer isolation with `danger-full-access`. No deployed policy was changed.
+See [LIVE-CHECKS.md](../docs/LIVE-CHECKS.md) for reproduction and the external
+restart procedure. Full isolation-environment replacement remains pending
+operator-host control and a dedicated test target.
+
 ## codex-cli 0.161.0 (reviewed October 7, 2026; Linux aarch64)
 
 Probes that need no login, each also re-run on 0.160.1 for comparison:
@@ -103,20 +136,24 @@ JSON bound and 64 KiB inline attachment content.
 
 ## Required deployment verification
 
-No Docker executable, real AMAP router, namespace, or existing sandbox launcher
-was available in this workspace. These remain **pending**, with no claim of
-production readiness:
+The in-environment deployment demonstrated the startup, bidirectional
+delegation/reply and instruction-migration results recorded above. Those
+results do not close every gate or validate the optional host-side/Compose
+model. The following separates measured behavior from additional evidence
+needed for a deployment:
 
-| Gate | Remaining evidence |
+| Gate | Evidence and remaining scope |
 | --- | --- |
-| Isolated launcher | Foreground stdio purity, exact image/version, stable container orphan detection and remote child cleanup |
-| OS isolation | Read-only write/rename/chmod/symlink attempts, another mailbox/journal/credential/socket access failures |
-| MCP deployment | All three required instances initialize; sidecars, nested result/processed mounts and atomic outbound staging work |
-| Trusted instructions | Workflow remains effective during resumed inference, with operator configuration outside writable work |
+| In-environment launcher | Startup and turns demonstrated on 0.161.0; actual sandbox-restart-mid-turn evidence remains pending |
+| Optional remote launcher | Host-side/Compose orphan detection and exact remote descendant cleanup have not been demonstrated live |
+| OS isolation | Deployment-owned write/rename/chmod/symlink and cross-namespace/credential/socket checks require explicit evidence; the in-environment model permits access to the agent's own journal |
+| MCP deployment | Effective three-server/tool registry measured; attachment sidecars, nested result/processed views and atomic staging need deployment-specific evidence |
+| Trusted instructions | Instruction migration to a new thread on the kept journal demonstrated; immutable workflow configuration remains a deployment responsibility |
 | Live headless requests | Actual approval and user-input protocol requests resolve visibly without permission expansion |
-| Router round trip | Real admitted peer request, distinct notice/message IDs, attachment, gated reply, runtime send result, and no reply loop |
+| Router round trip | Delegation and correlated replies in both directions demonstrated; this evidence does not establish every attachment or reply-loop case |
 | Outcomes | Router agrees to `outbound/ext/codex/outcomes`, vocabulary and crash publication semantics |
-| Recovery demo | Restart/duplicate scan and deliberately interrupted dispatch under actual isolation |
+| Recovery demo | Migration and real app-server/controller crash recovery retained state without duplicate dispatch; full sandbox replacement during a turn remains unproven live |
+| Shared Codex authentication | Concurrent managed refresh and real TUI/supervisor turns across rotation passed; automatic expiry-driven TUI refresh was not induced |
 | Runtime contract | Canonical claim paths/PID namespace, publish ordering, retention window, authenticated model egress |
 
 The wake-up fallback is implemented and fixture-tested but has no live proof;
