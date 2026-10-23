@@ -83,6 +83,34 @@ the event becomes uncertain and automatic dispatch pauses for the instance.
 
 See [docs/OPERATIONS.md](docs/OPERATIONS.md) before using recovery commands.
 
+## Interactive participation
+
+The supervisor and a native interactive Codex session are separate conversations.
+Incoming work executes on the supervisor; its messages do not automatically
+appear in the native interactive transcript. Starting bare `codex` does not
+install this connector's tools into that conversation.
+
+With the connector installed and its configuration available in the same
+execution environment, start an interactive session with AMAP tools and guidance:
+
+```sh
+amap-codex --config /etc/amap-connector/connector.toml interactive
+```
+
+Use `inbox_submit.peers` for the fleet roster, `submit`/`submit_result` for
+operator-authorized messaging, and `amap_fleet.activity` to inspect supervised
+work. Codex's local subagent list is not the AMAP roster. For continuous
+supervisor visibility, open a second terminal or pane with:
+
+```sh
+amap-codex --config /etc/amap-connector/connector.toml activity --follow
+```
+
+The activity view reads delivery state without acquiring claims, resuming a
+thread, or performing recovery. It also shows runtime send results when given
+an explicit `--outbox-dir`. See [the interactive integration contract](docs/INTERACTIVE.md)
+for installation handoffs, permissions, commands and proof limits.
+
 A deployment adapter renders the configuration, mounts and launcher for its
 isolation system, and decides where the supervisor runs
 ([docs/DESIGN.md](docs/DESIGN.md) §1). The connector knows no particular

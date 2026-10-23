@@ -202,6 +202,22 @@ Unknown dispatch blocks all further work and is never automatically replayed.
 recover-operator RUN_ID --action hold|handled --note NOTE records an audit entry;
 handled retires an unresolved run without sending it again. No kickoff retry action exists.
 
+## Interactive sessions and background work
+
+An interactive native Codex conversation does not automatically receive the
+supervisor's tools, messages or turn transcript. Launch it with the connector's
+`interactive` command for AMAP messaging and guidance. Discover fleet peers with
+`inbox_submit.peers`, not local Codex subagent discovery. Use
+`amap_fleet.activity` to inspect background work and `activity --follow` in a
+visible companion terminal for continuous metadata updates. Configure an explicit
+`--outbox-dir` to observe queued requests and runtime results.
+
+Do not diagnose a disconnected receiver solely from a quiet interactive pane.
+Inspect the specific admitted event and bound turn, then any reply's runtime
+result. Finished delivery metadata does not prove completion of the business
+task. Inspection performs no recovery or dispatch. The complete installation
+handoff and proof limits are in [INTERACTIVE.md](INTERACTIVE.md).
+
 ## Changing the configuration of a running instance
 
 The journal records the configuration fingerprint it was created under, which

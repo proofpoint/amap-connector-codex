@@ -96,6 +96,19 @@ def main(argv=None):
     commands.add_parser("run", help="claim enabled spools and drive one persistent thread")
     commands.add_parser('guard-command', help='hold canonical guards for another controlled connector')
     commands.add_parser("status", help="read delivery state without changing it")
+    activity = commands.add_parser('activity', help='show read-only supervisor execution and send-result metadata')
+    activity.add_argument('--follow', action='store_true')
+    activity.add_argument('--interval', type=float, default=1)
+    activity.add_argument('--limit', type=int, default=20)
+    activity.add_argument('--outbox-dir', type=Path)
+    activity_mcp = commands.add_parser('activity-mcp', help='serve the read-only interactive activity MCP tool')
+    activity_mcp.add_argument('--outbox-dir', type=Path)
+    for name in ('interactive', 'interactive-args'):
+        interactive = commands.add_parser(name, help='launch native Codex with AMAP tools, or print its argv as JSON')
+        interactive.add_argument('--binary', default='codex')
+        interactive.add_argument('--outbox-dir', type=Path)
+        if name == 'interactive':
+            interactive.add_argument('--prompt')
     doctor = commands.add_parser("doctor", help="check local paths/config; does not send a notice")
     doctor.add_argument("--probe", action="store_true", help="also initialize/start or resume app-server")
     kickoff = commands.add_parser('kickoff', help='queue privileged work on the existing controller')
@@ -143,6 +156,25 @@ def main(argv=None):
             finally: os.close(fd)
         elif args.command == "status":
             print(json.dumps(read_status(config), indent=2))
+        elif args.command == 'activity':
+            from .interactive import watch_activity
+            watch_activity(config, limit=args.limit, outbox=args.outbox_dir,
+                           interval=args.interval, follow=args.follow)
+        elif args.command == 'activity-mcp':
+            from .interactive import serve_activity
+            serve_activity(config, outbox=args.outbox_dir)
+        elif args.command in {'interactive', 'interactive-args'}:
+            from .interactive import interactive_argv
+            argv = asyncio.run(interactive_argv(config, args.config, binary=args.binary, outbox=args.outbox_dir))
+            if args.command == 'interactive-args':
+                print(json.dumps(argv))
+            else:
+                print('AMAP tools enabled. Incoming work runs in the separate supervisor conversation.\n'
+                      'Use amap_fleet.activity in this conversation; open `amap-codex --config CONFIG activity --follow`\n'
+                      'in another terminal for continuous supervisor visibility.', file=sys.stderr, flush=True)
+                if args.prompt is not None:
+                    argv += ['--', args.prompt]
+                os.execvp(argv[0], argv)
         elif args.command == "doctor":
             result = {"configuration": "valid", "expected_codex_version": config.codex_version,
                       "codex_reviewed": config.codex_reviewed,

@@ -74,6 +74,34 @@ See [LIVE-CHECKS.md](../docs/LIVE-CHECKS.md) for reproduction and the external
 restart procedure. Full isolation-environment replacement remains pending
 operator-host control and a dedicated test target.
 
+## Interactive surface (October 23, 2026; codex-cli 0.164.0)
+
+[interactive-0.164.0.json](interactive-0.164.0.json) records the opt-in
+`tests/integration/interactive_probe.py --infer` result in a synthetic namespace:
+
+- The actual native CLI parsed the generated argument vector and initialized
+  the three AMAP tool servers plus the required read-only activity server.
+- One native CLI model turn successfully called `inbox_submit.peers` and
+  `amap_fleet.activity`, returned the marker, and distinguished the fleet roster
+  from local subagents and the interactive conversation from the supervisor.
+- No submission, journal or claim was created. Real authentication remained in
+  its existing home; it was not copied into the fixture or evidence.
+
+The initial inference fixture omitted the submit server's explicit tool approval
+setting and its roster call was refused under native `approval_policy=never`.
+The successful fixture uses the same `default_tools_approval_mode="approve"`
+as the deployed configuration. The launcher does not change native sandbox or
+approval policy to obtain a pass.
+
+The activity command was also exercised read-only against an existing live
+supervisor and its runtime results. Producer-backed tests demonstrate active,
+finished and uncertain dispatch metadata without performing restart recovery.
+These checks do not establish native TUI mirroring, deployment installation,
+actual terminal-pane arrangement, remote isolation adapters, or full protocol
+review of 0.164.0. The reviewed-build list remains unchanged. Reproduce startup
+without inference by omitting `--infer`; keep optional `--diagnostics` logs private.
+See [the interactive contract](../docs/INTERACTIVE.md) for adapter acceptance.
+
 ## codex-cli 0.161.0 (reviewed October 7, 2026; Linux aarch64)
 
 Probes that need no login, each also re-run on 0.160.1 for comparison:
