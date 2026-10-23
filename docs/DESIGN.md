@@ -32,6 +32,22 @@ Revisit it when any of these holds:
 
 **Status:** the required app-server behavior is measured on the reviewed builds (`compatibility/README.md`), and a live deployment has carried delegations in both directions with the reference router (`compatibility/README.md`). Official documentation labels app-server experimental, so this is a reference release rather than a production support commitment; any build runs, and delivery relies on the live checks. [S4]
 
+### 1.3 Interactive participation and operator visibility
+
+The supervisor-owned conversation is distinct from a native interactive Codex
+conversation sharing its workspace. The connector's `interactive` entry point
+provides the latter with the protected AMAP tools, fleet guidance and read-only
+`amap_fleet.activity` tool. It retains native permissions and existing developer
+instructions. `activity --follow` provides a visible companion view of admitted
+events, turn/execution states and explicitly configured runtime send results.
+Neither inspection surface acquires incoming claims, resumes the owned thread,
+or performs restart recovery. Incoming metadata is not another task dispatch.
+
+The connector owns this portable interaction contract; adapters install its
+assets and arrange visible terminal surfaces through their generic launch
+facilities. No native transcript mirroring or dual ownership is implied.
+See [INTERACTIVE.md](INTERACTIVE.md) for commands and adapter acceptance criteria.
+
 ## 2. Scope
 
 | Include in v0.1 | Defer |
