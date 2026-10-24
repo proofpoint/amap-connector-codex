@@ -111,6 +111,22 @@ class Journal:
                 raise IntegrityConflict("journal is bound to a different thread")
             self.db.execute("UPDATE instance SET thread_id=? WHERE instance_id=?", (thread_id, self.instance_id))
 
+    def release_unused_thread(self, expected_thread_id):
+        """Release a positively missing rollout only before any recorded work.
+
+        The owner holds claims throughout the caller's failed resume and new
+        startup. Keep the journal and audit; never infer an old attempt unsent.
+        """
+        with self._transaction():
+            if not expected_thread_id or self.thread_id != expected_thread_id:
+                raise IntegrityConflict('unused-thread release does not match the bound thread')
+            if any(self.db.execute(f'SELECT 1 FROM {table} LIMIT 1').fetchone()
+                   for table in ('events', 'attempts', 'operator_runs')):
+                raise StateConflict('missing rollout has recorded work; explicit operator recovery required')
+            self.db.execute('UPDATE instance SET thread_id=NULL WHERE instance_id=?', (self.instance_id,))
+            self._audit(None, 'unused_thread_released',
+                        f'bound thread {expected_thread_id}: exact missing-rollout response; no events, attempts or operator runs')
+
     def _event(self, event_id):
         row = self.db.execute("SELECT * FROM events WHERE event_id=? AND instance_id=?", (event_id,self.instance_id)).fetchone()
         if row is None: raise KeyError(event_id)

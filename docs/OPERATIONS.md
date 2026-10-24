@@ -55,12 +55,22 @@ started but received no turns before shutdown: it has no persisted rollout to
 resume. This is distinct from native interactive resume, which the initial
 interactive wrapper does not support.
 
-Preserve the journal, inspect the bound thread and delivery/operator states,
-and inspect the correct Codex home's session storage. Do not delete state or
-automatically replace the thread on a generic `-32600` error. If an operator
-has established that replacement is appropriate, the existing explicit
-`migrate --note NOTE` workflow below keeps delivery history and refuses
-unresolved in-flight work. This diagnostic does not perform migration or retry.
+The owning supervisor recovers this one startup case automatically: the exact
+missing-rollout response must name its bound thread, and the journal must have
+no events, dispatch attempts or operator runs of any state. While retaining its
+claims, it atomically releases the unused binding and audits
+`unused_thread_released`, then creates one replacement thread with the same
+protected configuration. It retains the journal and makes no model turn. A
+further failure is reported; this is not an unbounded startup loop. The same
+case can recover again after another idle restart.
+
+Any recorded work, a different thread ID or a generic RPC failure refuses that
+recovery. Preserve the journal, inspect the bound thread and delivery/operator
+states, and inspect the correct Codex home's session storage. Do not delete
+state or automatically replace threads on generic `-32600` errors. Where an
+operator establishes that replacement is appropriate, `migrate --note NOTE`
+below keeps delivery history and refuses unresolved in-flight work. Read-only
+status/activity commands and diagnostic probes do not release bindings.
 
 ## Interpret the state
 

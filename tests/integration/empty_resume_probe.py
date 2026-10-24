@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 
 from amap_codex.app_server import AppServerClient, AppServerDelivery, RPCError
+from amap_codex.journal import Journal
 
 
 async def probe(binary, output):
@@ -65,6 +66,27 @@ async def probe(binary, output):
         finally:
             await second.stop()
         assert first.client.turn_starts == second.client.turn_starts == 0
+        with Journal(root / 'probe.sqlite3', 'synthetic', 'synthetic', build, None) as journal:
+            journal.bind_thread(thread)
+            replacements = []
+            for _ in range(2):
+                current = delivery()
+                try:
+                    before = journal.thread_id
+                    replacement = await current.start_or_resume(
+                        before, release_unused=journal.release_unused_thread)
+                    journal.bind_thread(replacement)
+                    assert replacement != before
+                    assert current.client.turn_starts == 0
+                    replacements.append(replacement)
+                finally:
+                    await current.stop()
+            assert journal.db.execute('SELECT COUNT(*) FROM events').fetchone()[0] == 0
+            assert journal.db.execute('SELECT COUNT(*) FROM attempts').fetchone()[0] == 0
+            assert journal.db.execute('SELECT COUNT(*) FROM operator_runs').fetchone()[0] == 0
+            assert journal.db.execute("SELECT COUNT(*) FROM audit WHERE action='unused_thread_released'").fetchone()[0] == 2
+            result.update(unused_thread_recovery=True, consecutive_idle_restarts=len(replacements),
+                          release_audit_records=2, journal_preserved=True)
         assert not (home / 'auth.json').exists()
         result.update(turn_start_requests=0, user_auth_used=False)
         output.write_text(json.dumps(result, indent=2) + '\n')

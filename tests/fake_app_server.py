@@ -66,9 +66,10 @@ for raw in sys.stdin:
     elif not initialized:
         sys.exit(10)
     elif method in {"thread/start", "thread/resume"}:
-        if mode == "resume_missing" and method == "thread/resume":
+        if mode in {"resume_missing", "resume_missing_matching"} and method == "thread/resume":
+            missing = params['threadId'] if mode == 'resume_missing_matching' else '00000000-0000-0000-0000-000000000001'
             emit({"id": rpc_id, "error": {"code": -32600,
-                  "message": "no rollout found for thread id 00000000-0000-0000-0000-000000000001",
+                  "message": "no rollout found for thread id " + missing,
                   "data": {"private": "SECRET_SERVER_DATA"}}})
             continue
         if mode == "resume_error" and method == "thread/resume":

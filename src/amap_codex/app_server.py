@@ -31,6 +31,8 @@ class RPCError(Exception):
         self.reason = "rollout_not_found" if self.code == -32600 and isinstance(message, str) and re.fullmatch(
             r"no rollout found for thread id [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
             message) else None
+        self.missing_thread_id = message.rsplit(' ', 1)[-1] if self.reason else None
+        self.method = None
         super().__init__(f"app-server RPC error {self.code}")
 
     def at_method(self, method: str):
@@ -38,9 +40,10 @@ class RPCError(Exception):
         known = {"initialize", "config/read", "thread/start", "thread/resume",
                  "thread/read", "mcpServerStatus/list", "turn/start", "turn/interrupt"}
         name = method if method in known else "unrecognized_method"
+        self.method = name
         detail = f"app-server RPC error {self.code} during {name}"
         if self.reason == "rollout_not_found" and name == "thread/resume":
-            detail += ": saved rollout not found; preserve the journal and inspect delivery state before explicit migration"
+            detail += ": saved rollout not found; preserve the journal; recorded work requires explicit operator recovery"
         self.args = (detail,)
         return self
 
@@ -290,7 +293,7 @@ class AppServerDelivery:
         # The agent's own MCP servers the bound thread runs with switched off.
         self.disabled_servers: list[str] = []
 
-    async def start_or_resume(self, thread_id: str | None = None) -> str:
+    async def start_or_resume(self, thread_id: str | None = None, *, release_unused=None) -> str:
         await self.client.start()
         method = "thread/resume" if thread_id else "thread/start"
         params = dict(self.settings)
@@ -302,7 +305,21 @@ class AppServerDelivery:
         if self.trusted_config is not None:
             params["config"], disabled = await self._thread_config()
         self.disabled_servers = sorted(disabled)
-        result = await self.client.request(method, params)
+        try:
+            result = await self.client.request(method, params)
+        except RPCError as error:
+            # A missing rollout is not generic proof of no prior work. Only
+            # the owning controller can authorize release against its durable
+            # dispatch ledger. The callback must refuse any recorded work.
+            if (release_unused is None or method != 'thread/resume' or
+                    error.method != method or error.reason != 'rollout_not_found' or
+                    error.missing_thread_id != thread_id or self.client.turn_starts != 0):
+                raise
+            release_unused(thread_id)
+            params.pop('threadId')
+            params['ephemeral'] = False
+            result = await self.client.request('thread/start', params)
+            thread_id = None
         actual = result.get("thread", {}).get("id")
         if not isinstance(actual, str) or not actual or (thread_id and actual != thread_id):
             raise RuntimeError("app-server returned invalid target binding")

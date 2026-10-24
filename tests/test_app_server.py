@@ -131,6 +131,22 @@ def test_turn_rpc_error_remains_uncertain_and_identifies_turn_start():
     asyncio.run(check())
 
 
+def test_missing_rollout_never_releases_after_a_turn_request():
+    async def check():
+        delivery = adapter('resume_missing_matching')
+        released = []
+        delivery.client.turn_starts = 1
+        try:
+            with pytest.raises(RPCError):
+                await delivery.start_or_resume('00000000-0000-0000-0000-000000000001',
+                                               release_unused=released.append)
+            assert released == []
+            assert delivery.thread_id is None
+        finally:
+            await delivery.stop()
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize("mode", ["approval", "user_input"])
 def test_server_requests_do_not_block_reader_or_autoapprove(mode):
     async def check():

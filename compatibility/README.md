@@ -147,13 +147,19 @@ Reproduce with the existing test environment:
 ```sh
 python tests/integration/empty_resume_probe.py --output /tmp/empty-resume.json
 python tests/mutations/rpc_diagnostics.py
+python tests/mutations/unused_thread.py
 ```
 
 The committed probe uses a custom provider and proxies directed at a closed
 local port. It reports only safe error categories, without thread IDs or raw
 server messages. This is evidence of an upstream persistence boundary, not
-proof of the cause of any particular deployment failure. The connector retains
-its journal binding on failure; replacement remains an explicit operator action.
+proof of the cause of any particular deployment failure. The supervisor now recovers two consecutive idle restarts in this probe with
+zero turn requests and two durable release audit records. Replacement is
+restricted to an exact missing-rollout response for the bound thread and a
+journal with no events, attempts or operator runs of any state. All other
+bindings remain held for explicit operator recovery. No schema change, journal
+deletion or inference is involved. Native interactive resume remains a separate
+unsupported path in the initial wrapper.
 
 ## codex-cli 0.161.0 (reviewed October 7, 2026; Linux aarch64)
 
