@@ -66,6 +66,9 @@ for raw in sys.stdin:
     elif not initialized:
         sys.exit(10)
     elif method in {"thread/start", "thread/resume"}:
+        if method == 'thread/start' and os.environ.get('FAKE_START_ERROR') == '1':
+            emit({'id': rpc_id, 'error': {'code': -32603, 'message': 'synthetic start failure'}})
+            continue
         if mode in {"resume_missing", "resume_missing_matching"} and method == "thread/resume":
             missing = params['threadId'] if mode == 'resume_missing_matching' else '00000000-0000-0000-0000-000000000001'
             emit({"id": rpc_id, "error": {"code": -32600,

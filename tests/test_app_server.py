@@ -147,6 +147,27 @@ def test_missing_rollout_never_releases_after_a_turn_request():
     asyncio.run(check())
 
 
+@pytest.mark.parametrize('bound', [None, '00000000-0000-0000-0000-000000000001'])
+def test_missing_rollout_release_requires_existing_binding_and_explicit_callback(tmp_path, monkeypatch, bound):
+    async def check():
+        delivery = adapter('resume_missing_matching')
+        released = []
+        if bound is None:
+            monkeypatch.setenv('FAKE_START_ERROR', '1')
+        caught = None
+        try:
+            try:
+                await delivery.start_or_resume(bound, release_unused=released.append if bound is None else None)
+            except Exception as error:
+                caught = error
+            assert released == [], 'a failed initial start must not authorize a release'
+            assert isinstance(caught, RPCError), 'no callback means ordinary RPC failure, without recovery'
+            assert delivery.thread_id is None and delivery.client.turn_starts == 0
+        finally:
+            await delivery.stop()
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize("mode", ["approval", "user_input"])
 def test_server_requests_do_not_block_reader_or_autoapprove(mode):
     async def check():

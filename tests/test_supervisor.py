@@ -99,6 +99,31 @@ def test_missing_unused_rollout_is_replaced_under_claims_and_audited(tmp_path):
     asyncio.run(check())
 
 
+def test_failed_replacement_keeps_release_audit_and_next_start_can_create(tmp_path, monkeypatch):
+    config = config_for(tmp_path, 'resume_missing_matching')
+    old = '00000000-0000-0000-0000-000000000001'
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(), config.codex_version, config.codex_model) as journal:
+        journal.bind_thread(old)
+    async def check():
+        monkeypatch.setenv('FAKE_START_ERROR', '1')
+        first = Supervisor(config)
+        with pytest.raises(RPCError, match='during thread/start'):
+            await first.start()
+        assert read_status(config)['thread_id'] is None
+        assert first.delivery.client.turn_starts == 0
+        assert not config.lanes[0].claim_path.exists()
+        monkeypatch.delenv('FAKE_START_ERROR')
+        second = Supervisor(config)
+        try:
+            await second.start()
+            assert second.journal.thread_id == 'thread-fixture'
+            assert second.journal.db.execute("SELECT COUNT(*) FROM audit WHERE action='unused_thread_released'").fetchone()[0] == 1
+            assert second.delivery.client.turn_starts == 0
+        finally:
+            await second.close()
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize('work', ['pending', 'finished', 'uncertain', 'operator'])
 def test_missing_rollout_with_recorded_work_refuses_replacement(tmp_path, work):
     config = config_for(tmp_path, 'resume_missing_matching')

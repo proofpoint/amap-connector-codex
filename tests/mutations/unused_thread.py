@@ -14,6 +14,10 @@ import tempfile
 def main():
     repo = Path(__file__).resolve().parents[2]
     cases = [
+        ('existing binding', 'app_server.py', 'thread_id is None', 'False',
+         'test_app_server.py::test_missing_rollout_release_requires_existing_binding_and_explicit_callback[None]'),
+        ('explicit callback', 'app_server.py', 'release_unused is None', 'False',
+         'test_app_server.py::test_missing_rollout_release_requires_existing_binding_and_explicit_callback[00000000-0000-0000-0000-000000000001]'),
         ('matching bound rollout', 'app_server.py', 'error.missing_thread_id != thread_id', 'False',
          'test_supervisor.py::test_missing_resume_rollout_keeps_binding_and_never_dispatches_or_replaces_thread'),
         ('no prior turn request', 'app_server.py', 'self.client.turn_starts != 0', 'False',

@@ -311,8 +311,9 @@ class AppServerDelivery:
             # A missing rollout is not generic proof of no prior work. Only
             # the owning controller can authorize release against its durable
             # dispatch ledger. The callback must refuse any recorded work.
-            if (release_unused is None or method != 'thread/resume' or
-                    error.method != method or error.reason != 'rollout_not_found' or
+            # missing_thread_id exists only for the constructor's exact
+            # code/message category; a nonempty binding selects resume above.
+            if (release_unused is None or thread_id is None or
                     error.missing_thread_id != thread_id or self.client.turn_starts != 0):
                 raise
             release_unused(thread_id)

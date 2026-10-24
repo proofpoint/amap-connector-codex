@@ -64,6 +64,11 @@ protected configuration. It retains the journal and makes no model turn. A
 further failure is reported; this is not an unbounded startup loop. The same
 case can recover again after another idle restart.
 
+The empty-ledger check covers the entire journal's lifetime. Even a completed
+or refused prior event prevents automatic release after a later configuration
+migration. If release commits but replacement startup fails, the binding stays
+empty with its audit record; the next startup makes a fresh attempt.
+
 Any recorded work, a different thread ID or a generic RPC failure refuses that
 recovery. Preserve the journal, inspect the bound thread and delivery/operator
 states, and inspect the correct Codex home's session storage. Do not delete
