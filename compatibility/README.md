@@ -125,6 +125,13 @@ are explicitly unsupported by this initial wrapper contract; literal prompts
 use native `--`. These are refusals, not silently dropped arguments. No native
 TUI or complete deployment acceptance is claimed by these connector probes.
 
+Independent review found a malformed-evidence gap: JSON null in
+`blocked_requests` was treated as an empty list. Only a valid empty list now
+establishes clear evidence; null and other non-list values stay unknown. The
+producer-backed negative control and its reverted-predicate mutation are in the
+reproducible [mutation inventory](../tests/mutations/interactive.py), alongside
+the other named guard mutations. This suite uses scratch copies only.
+
 ## codex-cli 0.161.0 (reviewed October 7, 2026; Linux aarch64)
 
 Probes that need no login, each also re-run on 0.160.1 for comparison:

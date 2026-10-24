@@ -520,3 +520,19 @@ def test_native_wrapper_does_not_duplicate_native_cwd_or_terminal_options(tmp_pa
     assert argv[:len(native)]==native
     assert argv.count('--no-alt-screen')==1
     assert argv.count('--cd')==1
+
+
+@pytest.mark.parametrize('blocked',[None,False,0,'',{},'not-a-list'])
+def test_malformed_blocked_request_evidence_cannot_make_supervisor_ready(tmp_path,blocked):
+    config,_=configured(tmp_path)
+    with produced(config) as journal, Ownership(config) as owned:
+        journal.accept('event-private','turn-a');journal.finish('event-private','completed')
+        supervisor=Supervisor(config);supervisor.journal=journal;supervisor.ownership=owned
+        supervisor.write_status()
+        assert interactive.read_activity(config)['readiness']['state']=='ready'
+        path=config.state_dir/'status.json'
+        snapshot=json.loads(path.read_text());snapshot['blocked_requests']=blocked
+        path.write_text(json.dumps(snapshot))
+        value=interactive.read_activity(config)
+        assert value['readiness']['state']=='unknown'
+        assert value['readiness']['checks']['blocked_requests_clear']=='unknown'
