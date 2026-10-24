@@ -187,7 +187,7 @@ def test_activity_mcp_offers_only_bounded_read_only_tool_and_survives_invalid_re
         interactive.serve_activity(config, source=io.BytesIO(b'x'*(1024*1024+1)), output=io.StringIO())
 
 
-def native_client(monkeypatch, native=None):
+def native_client(monkeypatch, native=None, responses=None):
     clients = []
     class Client:
         def __init__(self,*a,**k): self.argv=a[0];self.params=[];self.calls=[];self.stopped=False;clients.append(self)
@@ -195,6 +195,11 @@ def native_client(monkeypatch, native=None):
         async def request(self,method,params):
             self.calls.append(method)
             self.params.append(params)
+            if method != 'config/read':
+                value = (responses or {})[method]
+                if isinstance(value, BaseException):
+                    raise value
+                return value
             return {'config':native if native is not None else {'mcp_servers':{'personal':{}},'developer_instructions':'EXISTING_POLICY'}}
         async def stop(self): self.stopped=True
     monkeypatch.setattr(interactive,'AppServerClient',Client)
@@ -297,7 +302,7 @@ def test_native_wrapper_preflight_refuses_reserved_name_from_native_overrides(tm
 
 
 @pytest.mark.parametrize('tail', [
-    ['resume', '--last'], ['--model', 'model', 'resume'], ['fork'], ['exec'],
+    ['resume'], ['--model', 'model', 'resume'], ['fork'], ['exec'],
     ['--', 'resume', '--last'],
 ])
 def test_native_wrapper_subcommands_are_refused_but_literal_prompt_is_not_a_subcommand(tmp_path, monkeypatch, tail):
@@ -311,6 +316,235 @@ def test_native_wrapper_subcommands_are_refused_but_literal_prompt_is_not_a_subc
         with pytest.raises(ValueError, match='subcommand'):
             asyncio.run(interactive.interactive_argv(config, path, native_argv=['codex', *tail]))
         assert not clients
+
+
+CLI_SESSION = '00000000-0000-0000-0000-000000000002'
+OWNED_SESSION = '00000000-0000-0000-0000-000000000001'
+
+
+def resume_responses(config, thread):
+    definitions = config.trusted_overrides()['mcp_servers']
+    return {'thread/list': {'data': [thread]}, 'thread/read': {'thread': thread},
+            'thread/resume': {'thread': {**thread, 'status': {'type': 'idle'}}},
+            'mcpServerStatus/list': {'data': [
+                {'name': name, 'tools': {tool: {} for tool in definition['enabled_tools']}}
+                for name, definition in {**definitions, 'amap_fleet': {'enabled_tools': ['activity']}}.items()]},
+            'thread/inject_items': {}}
+
+
+@pytest.mark.parametrize('thread,selector,bound', [
+    (None, '--last', None),
+    ({'id': 'invalid', 'source': 'cli', 'cwd': '/work'}, '--last', None),
+    ({'id': CLI_SESSION, 'source': 'cli', 'cwd': '/work'}, OWNED_SESSION, None),
+    ({'id': CLI_SESSION, 'source': 'cli', 'cwd': '/work'}, '--last', CLI_SESSION),
+    ({'id': CLI_SESSION, 'source': 'vscode', 'cwd': '/work'}, '--last', None),
+    ({'id': CLI_SESSION, 'source': 'cli', 'cwd': '/different'}, '--last', None),
+])
+def test_cli_resume_metadata_restrictions(thread, selector, bound):
+    with pytest.raises(ValueError):
+        interactive.validate_native_session(thread, '/work', selector, bound)
+
+
+@pytest.mark.parametrize('tail', [
+    ['resume', '--last', CLI_SESSION], ['resume', '--last', '--last'],
+])
+def test_native_resume_parser_refuses_multiple_selectors(tail):
+    with pytest.raises(ValueError, match='exactly one'):
+        interactive.native_interactive_args(['codex', *tail], '/work')
+
+
+def test_native_last_resolution_refuses_multiple_results_before_loading(tmp_path):
+    config, path = configured(tmp_path)
+    class Client:
+        async def request(self, method, params):
+            assert method == 'thread/list'
+            return {'data': [{'id': CLI_SESSION, 'source': 'cli', 'cwd': config.cwd}] * 2}
+    with pytest.raises(ValueError, match='single CLI'):
+        asyncio.run(interactive.native_resume_target(Client(), config, config.cwd, '--last'))
+
+
+@pytest.mark.parametrize('selector', ['--last', CLI_SESSION])
+def test_native_resume_resolves_cli_target_preserves_policy_and_never_dispatches_turn(tmp_path, monkeypatch, selector):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    thread = {'id': CLI_SESSION, 'source': 'cli', 'cwd': config.cwd}
+    clients = native_client(monkeypatch, responses=resume_responses(config, thread))
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(), config.codex_version, config.codex_model) as journal:
+        journal.bind_thread(OWNED_SESSION)
+    before = (config.state_dir / 'journal.sqlite3').read_bytes()
+    args = asyncio.run(interactive.interactive_argv(config, path, prepare_resume=True, native_argv=[
+        'codex', 'resume', selector, '-s', 'read-only', '-a', 'never', '--no-daemon', '--', 'Literal; $(prompt)']))
+    assert args[4:6] == ['resume', CLI_SESSION]
+    assert args[6:11] == ['-s', 'read-only', '-a', 'never', '--no-daemon']
+    assert '--last' not in args
+    assert args[-2:] == ['--', 'Literal; $(prompt)']
+    assert clients[0].calls == ['config/read', 'thread/list' if selector == '--last' else 'thread/read',
+                              'thread/resume', 'mcpServerStatus/list', 'thread/inject_items']
+    if selector == '--last':
+        assert clients[0].params[1] == {'cwd': config.cwd, 'sourceKinds': ['cli'],
+            'archived': False, 'sortKey': 'created_at', 'sortDirection': 'desc', 'limit': 1}
+    else:
+        assert clients[0].params[1] == {'threadId': CLI_SESSION, 'includeTurns': False}
+    injected = clients[0].params[-1]
+    assert injected['threadId'] == CLI_SESSION
+    assert injected['items'][0]['role'] == 'developer'
+    assert config.operator_instructions.read_text() in injected['items'][0]['content'][0]['text']
+    assert clients[0].stopped
+    assert (config.state_dir / 'journal.sqlite3').read_bytes() == before
+    assert not config.lanes[0].claim_path.exists()
+    assert not (config.state_dir / 'process.json').exists()
+    definitions = [tomllib.loads(args[i+1]) for i, value in enumerate(args) if value == '-c']
+    assert 'separate supervisor' in definitions[-1]['developer_instructions']
+
+
+@pytest.mark.parametrize('changed,expected', [
+    ({'id': OWNED_SESSION}, 'supervisor-owned'),
+    ({'source': 'vscode'}, 'CLI conversations only'),
+    ({'source': 'appServer'}, 'CLI conversations only'),
+    ({'source': {'subAgent': {}}}, 'CLI conversations only'),
+    ({'cwd': '/different-workspace'}, 'different workspace'),
+    ({'cwd': None}, 'different workspace'),
+    ({'id': 'not-a-uuid'}, 'ID is invalid'),
+])
+def test_native_resume_refuses_owned_noncli_wrong_workspace_and_bad_metadata(tmp_path, monkeypatch, changed, expected):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(), config.codex_version, config.codex_model) as journal:
+        journal.bind_thread(OWNED_SESSION)
+    thread = {'id': CLI_SESSION, 'source': 'cli', 'cwd': config.cwd, **changed}
+    clients = native_client(monkeypatch, responses={'thread/list': {'data': [thread]}})
+    with pytest.raises(ValueError, match=expected):
+        asyncio.run(interactive.interactive_argv(config, path, prepare_resume=True, native_argv=['codex', 'resume', '--last']))
+    assert clients[0].stopped
+
+
+def test_native_resume_refuses_metadata_for_another_explicit_target(tmp_path, monkeypatch):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    native_client(monkeypatch, responses={'thread/read': {'thread': {
+        'id': OWNED_SESSION, 'source': 'cli', 'cwd': config.cwd}}})
+    with pytest.raises(ValueError, match='different session'):
+        asyncio.run(interactive.interactive_argv(config, path, prepare_resume=True, native_argv=['codex', 'resume', CLI_SESSION]))
+
+
+@pytest.mark.parametrize('data', [None, [], {}, [None], [{'id': CLI_SESSION}] * 2])
+def test_native_resume_refuses_missing_ambiguous_or_malformed_last_result(tmp_path, monkeypatch, data):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    clients = native_client(monkeypatch, responses={'thread/list': {'data': data}})
+    with pytest.raises(ValueError):
+        asyncio.run(interactive.interactive_argv(config, path, prepare_resume=True, native_argv=['codex', 'resume', '--last']))
+    assert clients[0].stopped
+
+
+@pytest.mark.parametrize('tail', [
+    ['resume', '--last', CLI_SESSION], ['resume', '--last', '--last'],
+    ['resume', 'session-name'], ['resume', '--include-non-interactive'],
+    ['resume', '--all'], ['resume', '--last', '--remote', 'unix:///server'],
+])
+def test_native_resume_refuses_ambiguous_picker_remote_and_name_selectors(tmp_path, monkeypatch, tail):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    clients = native_client(monkeypatch)
+    with pytest.raises(ValueError):
+        asyncio.run(interactive.interactive_argv(config, path, prepare_resume=True, native_argv=['codex', *tail]))
+    assert not clients
+
+
+def test_native_resume_preview_is_refused_without_loading_or_changing_history(tmp_path, monkeypatch, capsys):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    from amap_codex.config import Config
+    monkeypatch.setattr(Config, 'load', lambda *a, **k: config)
+    clients = native_client(monkeypatch)
+    assert main(['--config', str(path), 'interactive-args', '--', 'codex', 'resume', '--last']) == 1
+    assert 'read-only' in capsys.readouterr().err
+    assert not clients
+    assert not (config.state_dir / 'journal.sqlite3').exists()
+
+
+@pytest.mark.parametrize('alteration', ['missing', 'wrong_id', 'wrong_source', 'wrong_cwd', 'not_idle'])
+def test_native_resume_revalidates_loaded_target_before_policy_update(tmp_path, monkeypatch, alteration):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    thread = {'id': CLI_SESSION, 'source': 'cli', 'cwd': config.cwd}
+    responses = resume_responses(config, thread)
+    loaded = responses['thread/resume']['thread']
+    if alteration == 'missing':
+        responses['thread/resume'] = {}
+    elif alteration == 'wrong_id':
+        loaded['id'] = OWNED_SESSION
+    elif alteration == 'wrong_source':
+        loaded['source'] = 'vscode'
+    elif alteration == 'wrong_cwd':
+        loaded['cwd'] = '/another-workspace'
+    else:
+        loaded['status'] = {'type': 'active', 'activeFlags': []}
+    clients = native_client(monkeypatch, responses=responses)
+    with pytest.raises(ValueError):
+        asyncio.run(interactive.interactive_argv(config, path, prepare_resume=True,
+                                               native_argv=['codex', 'resume', '--last']))
+    assert clients[0].stopped and 'thread/inject_items' not in clients[0].calls
+
+
+@pytest.mark.parametrize('alteration', ['missing', 'extra_tool', 'error', 'wrong_shape', 'duplicate', 'cursor_loop'])
+def test_native_resume_requires_protected_tools_before_policy_update(tmp_path, monkeypatch, alteration):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    responses = resume_responses(config, {'id': CLI_SESSION, 'source': 'cli', 'cwd': config.cwd})
+    page = responses['mcpServerStatus/list']
+    if alteration == 'missing':
+        page['data'].pop()
+    elif alteration == 'extra_tool':
+        page['data'][-1]['tools']['untrusted'] = {}
+    elif alteration == 'error':
+        page['data'][-1]['toolsError'] = 'synthetic failure'
+    elif alteration == 'wrong_shape':
+        page['data'][-1]['tools'] = list(page['data'][-1]['tools'])
+    elif alteration == 'duplicate':
+        page['data'].append(page['data'][-1])
+    else:
+        page['nextCursor'] = 'same-cursor'
+    clients = native_client(monkeypatch, responses=responses)
+    with pytest.raises(ValueError, match='bound' if alteration == 'cursor_loop' else None):
+        asyncio.run(interactive.interactive_argv(config, path, prepare_resume=True,
+                                               native_argv=['codex', 'resume', '--last']))
+    assert clients[0].stopped and 'thread/inject_items' not in clients[0].calls
+
+
+def test_native_resume_uncertain_policy_write_never_execs_or_retries(tmp_path, monkeypatch, capsys):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    from amap_codex.app_server import Uncertain
+    from amap_codex.config import Config
+    responses = resume_responses(config, {'id': CLI_SESSION, 'source': 'cli', 'cwd': config.cwd})
+    responses['thread/inject_items'] = Uncertain('synthetic lost reply')
+    clients = native_client(monkeypatch, responses=responses)
+    monkeypatch.setattr(Config, 'load', lambda *a, **k: config)
+    executed = []
+    monkeypatch.setattr('os.execvp', lambda *args: executed.append(args))
+    assert main(['--config', str(path), 'interactive', '--', 'codex', 'resume', '--last']) == 1
+    assert 'Uncertain' in capsys.readouterr().err
+    assert not executed and clients[0].calls.count('thread/inject_items') == 1
+    assert clients[0].stopped
+
+
+@pytest.mark.parametrize('stage', [0, 1])
+def test_native_resume_refuses_foreign_journal_before_loading_or_updating_policy(tmp_path, monkeypatch, stage):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    responses = resume_responses(config, {'id': CLI_SESSION, 'source': 'cli', 'cwd': config.cwd})
+    clients = native_client(monkeypatch, responses=responses)
+    from amap_codex import cli
+    observed = []
+    def read(*args):
+        observed.append(1)
+        return {'instance_id': 'another-instance' if len(observed) > stage else config.instance_id}
+    monkeypatch.setattr(cli, 'read_status', read)
+    with pytest.raises(ValueError, match='another instance'):
+        asyncio.run(interactive.interactive_argv(config, path, prepare_resume=True,
+                                               native_argv=['codex', 'resume', '--last']))
+    assert clients[0].stopped and 'thread/inject_items' not in clients[0].calls
 
 
 @pytest.mark.parametrize('tail', [['-p', 'profile'], ['--profile=profile'], ['-pprofile'],

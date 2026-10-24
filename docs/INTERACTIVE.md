@@ -20,8 +20,9 @@ amap-codex --config /etc/amap-connector/connector.toml interactive
 ```
 
 `interactive` first initializes the selected binary's app-server and reads its
-effective configuration, without creating or resuming a thread. Its actual build
-must match `codex_version`. It then execs native Codex with:
+effective configuration. A fresh launch creates or resumes no thread during
+preflight; resume additionally prepares the selected CLI conversation as below.
+The actual build must match `codex_version`. It then execs native Codex with:
 
 - The protected `inbox`, `delegation` and `inbox_submit` MCP definitions.
 - A required `amap_fleet` MCP server exposing only the read-only `activity` tool.
@@ -33,8 +34,9 @@ must match `codex_version`. It then execs native Codex with:
 Model, authentication, approval policy, sandbox and network settings retain their
 native configuration. Other native MCP registrations are retained. Existing
 registrations named `inbox`, `delegation`, `inbox_submit` or `amap_fleet` are refused
-instead of silently overwritten. This entry point starts a new interactive
-conversation; do not manually resume the supervisor-owned thread in it.
+instead of silently overwritten. Without a native `resume` request this starts
+a new interactive conversation. The supervisor-owned thread is never a valid
+interactive resume target.
 
 `--binary` selects an installed native Codex executable. `--prompt` provides an
 optional initial interactive prompt as a literal argument. No shell interpolation
@@ -61,14 +63,38 @@ options after native options and before any literal prompt. It supplies the
 configured cwd as a default; a native `--cd` overrides it and selects the cwd
 used by preflight too. No shell parses this argument vector.
 
-This passthrough accepts new local interactive conversations only. It explicitly
-refuses native subcommands, including `resume` and `fork`, remote connections,
-managed worktree launches and unknown options. Native `--profile`/`-p` is also
-refused: the reviewed app-server preflight cannot load that CLI profile, so it
-cannot establish its effective registry and instructions. The adapter must report
-these failures and must not strip an option, drop `resume`, or fall back to bare
-Codex. Ordinary ambient native configuration remains supported. This limitation
-also applies when generating an argv with `interactive-args`.
+Local resume supports `resume --last` and `resume SESSION_UUID`:
+
+```sh
+amap-codex --config "$CONNECTOR_CONFIG" interactive --outbox-dir "$CONNECTOR_OUTBOX" -- codex resume --last --sandbox read-only -a on-request --no-daemon
+```
+
+`--last` selects the most recently created, non-archived CLI conversation in
+the effective workspace, using a source filter and resolving it to an explicit
+UUID before native launch. Editor/app-server sessions are excluded: Codex can
+classify a supervisor's thread as an editor session. Explicit UUIDs must also
+name CLI history in that workspace. Both the metadata lookup and subsequent
+resume are checked; the bound supervisor ID is refused even if its reported
+source is CLI. No missing target falls back to creating a conversation.
+
+On Codex 0.164.0, changing `developer_instructions` on the command line does not
+replace developer context already stored in an established conversation. After
+verifying the selected target is idle and its protected four-server MCP registry
+matches, the connector appends the current protected policy and guidance as a
+developer item through `thread/inject_items`. It starts no model turn, preserves
+the conversation history, journal and claims, and closes its app-server before
+native Codex resumes the same explicit ID. Each explicit launch appends one
+current policy item, including when the policy has changed; there is no stale
+receipt-based shortcut. A failed or uncertain update refuses launch and is never
+automatically retried. This path requires that build's supported injection API.
+
+`interactive-args` remains read-only and refuses resume, because an argv preview
+cannot prepare the current policy. Use `interactive` to execute resume. Picker,
+named-session, cross-workspace, editor, `--all`, `--include-non-interactive`, fork,
+remote and managed-worktree modes remain refused. Native `--profile`/`-p` is
+also refused: the reviewed app-server preflight cannot load that CLI profile.
+Unknown options fail explicitly. An adapter must report a refusal and must not
+drop `resume`, silently start fresh or fall back to bare Codex.
 
 For messaging, look up the intended recipient using `inbox_submit.peers`. Codex's
 local subagent list does not discover fleet peers. Submit only within the
@@ -168,7 +194,8 @@ An adapter which assembles native argument vectors can instead run:
 amap-codex --config /etc/amap-connector/connector.toml interactive-args
 ```
 
-It returns the complete argument vector as JSON after the same preflight. Parse
+For fresh conversations it returns the complete argument vector as JSON after
+configuration preflight. Resume requires `interactive` instead. Parse
 that JSON and pass an argument array directly; do not join it into a shell command
 or split it on whitespace. Index zero is the binary; following elements are
 root-level native options, followed only by an optional `--` and literal prompt.

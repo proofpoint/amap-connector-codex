@@ -97,6 +97,11 @@ execution environment, start an interactive session with AMAP tools and guidance
 amap-codex --config /etc/amap-connector/connector.toml interactive
 ```
 
+To resume CLI history in the current workspace, pass `-- codex resume --last`
+to `interactive`. It resolves an explicit CLI ID, excludes the supervisor, and
+appends current protected developer policy without starting a model turn.
+Read-only `interactive-args` refuses resume.
+
 Use `inbox_submit.peers` for the fleet roster, `submit`/`submit_result` for
 operator-authorized messaging, and `amap_fleet.activity` to inspect supervised
 work. Codex's local subagent list is not the AMAP roster. For continuous

@@ -179,7 +179,8 @@ def main(argv=None):
                 if getattr(args, 'prompt', None) is not None:
                     raise ValueError('use either --prompt or a native argv, not both')
             argv = asyncio.run(interactive_argv(config, args.config, binary=args.binary,
-                                               outbox=args.outbox_dir, native_argv=native or None))
+                                               outbox=args.outbox_dir, native_argv=native or None,
+                                               prepare_resume=args.command == 'interactive'))
             if args.command == 'interactive-args':
                 print(json.dumps(argv))
             else:
