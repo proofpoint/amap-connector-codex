@@ -386,6 +386,7 @@ def test_native_resume_resolves_cli_target_preserves_policy_and_never_dispatches
     else:
         assert clients[0].params[1] == {'threadId': CLI_SESSION, 'includeTurns': False}
     injected = clients[0].params[-1]
+    assert clients[0].params[2]['excludeTurns'] is True
     assert injected['threadId'] == CLI_SESSION
     assert injected['items'][0]['role'] == 'developer'
     assert config.operator_instructions.read_text() in injected['items'][0]['content'][0]['text']

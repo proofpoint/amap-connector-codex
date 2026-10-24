@@ -371,7 +371,7 @@ async def prepare_native_resume(client, config, target, cwd, servers, instructio
     """
     from .cli import read_status
     resumed = (await client.request('thread/resume', {
-        'threadId': target, 'config': {'mcp_servers': servers}})).get('thread')
+        'threadId': target, 'excludeTurns': True, 'config': {'mcp_servers': servers}})).get('thread')
     status = read_status(config)
     if status.get('instance_id') != config.instance_id:
         raise ValueError('resume journal belongs to another instance')
