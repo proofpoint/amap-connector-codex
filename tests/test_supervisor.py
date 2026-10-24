@@ -9,6 +9,7 @@ import sys
 import pytest
 
 from amap_codex.claims import ClaimHeld
+from amap_codex.app_server import RPCError
 from amap_codex.config import Config, Lane
 from amap_codex.journal import Journal
 from amap_codex.cli import read_status
@@ -51,6 +52,25 @@ async def until(supervisor, predicate, timeout=2):
         await supervisor.tick()
         await asyncio.sleep(0.01)
     assert predicate(), 'controller did not reach expected state'
+
+
+def test_missing_resume_rollout_keeps_binding_and_never_dispatches_or_replaces_thread(tmp_path):
+    config = config_for(tmp_path, 'resume_missing')
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(),
+                 config.codex_version, config.codex_model) as journal:
+        journal.bind_thread('thread-fixture')
+    async def check():
+        supervisor = Supervisor(config)
+        with pytest.raises(RPCError, match='during thread/resume: saved rollout not found'):
+            await supervisor.start()
+        assert supervisor.delivery.client.turn_starts == 0
+        assert supervisor.delivery.thread_id is None
+        assert supervisor.delivery.client.process.returncode is not None
+        assert not config.lanes[0].claim_path.exists()
+        assert not (config.state_dir / 'process.json').exists()
+    asyncio.run(check())
+    assert read_status(config)['thread_id'] == 'thread-fixture'
+    assert not Path(config.launch_argv[-1]).exists()
 
 @pytest.mark.parametrize('mode',['normal','early_completed'])
 def test_finished_notice_is_never_replayed_after_scan_and_restart(tmp_path,mode):

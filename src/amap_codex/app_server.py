@@ -7,6 +7,7 @@ import copy
 import contextlib
 import json
 import os
+import re
 import signal
 from dataclasses import dataclass
 from typing import Any
@@ -22,9 +23,26 @@ class Uncertain(Exception):
 
 class RPCError(Exception):
     def __init__(self, error: dict):
-        self.code = error.get("code")
-        # Server strings can contain sender data; expose only the error code.
+        code = error.get("code")
+        self.code = code if type(code) is int else None
+        # Never retain arbitrary server text: it can contain sender content,
+        # paths or credentials. Recognize only this measured, exact shape.
+        message = error.get("message")
+        self.reason = "rollout_not_found" if self.code == -32600 and isinstance(message, str) and re.fullmatch(
+            r"no rollout found for thread id [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            message) else None
         super().__init__(f"app-server RPC error {self.code}")
+
+    def at_method(self, method: str):
+        # This is the local request, never a method echoed by the server.
+        known = {"initialize", "config/read", "thread/start", "thread/resume",
+                 "thread/read", "mcpServerStatus/list", "turn/start", "turn/interrupt"}
+        name = method if method in known else "unrecognized_method"
+        detail = f"app-server RPC error {self.code} during {name}"
+        if self.reason == "rollout_not_found" and name == "thread/resume":
+            detail += ": saved rollout not found; preserve the journal and inspect delivery state before explicit migration"
+        self.args = (detail,)
+        return self
 
 
 TRUSTED_SERVERS = frozenset({"inbox", "delegation", "inbox_submit"})
@@ -141,6 +159,8 @@ class AppServerClient:
                 return await asyncio.wait_for(asyncio.shield(future), self.timeout)
             except asyncio.TimeoutError as exc:
                 raise Uncertain("RPC response timeout after dispatch") from exc
+            except RPCError as exc:
+                raise exc.at_method(method)
         finally:
             self._pending.pop(rpc_id, None)
             if not future.done():

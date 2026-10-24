@@ -47,6 +47,21 @@ After a successful thread bind and clean startup reconciliation, a resolved
 work, client errors and uncertain outcome publication keep their diagnostics.
 Clearing a diagnostic never resets delivery state or retries work.
 
+App-server RPC errors identify the failed local method and numeric error code.
+Arbitrary server messages and data are excluded because they may contain sender
+content or credentials. A recognized `thread/resume` failure also reports
+`saved rollout not found`. Codex 0.164.0 can exhibit this after a thread was
+started but received no turns before shutdown: it has no persisted rollout to
+resume. This is distinct from native interactive resume, which the initial
+interactive wrapper does not support.
+
+Preserve the journal, inspect the bound thread and delivery/operator states,
+and inspect the correct Codex home's session storage. Do not delete state or
+automatically replace the thread on a generic `-32600` error. If an operator
+has established that replacement is appropriate, the existing explicit
+`migrate --note NOTE` workflow below keeps delivery history and refuses
+unresolved in-flight work. This diagnostic does not perform migration or retry.
+
 ## Interpret the state
 
 An **accepted** event crossed the app-server boundary and is associated with
