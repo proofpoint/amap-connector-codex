@@ -14,7 +14,7 @@ from amap_codex import interactive
 from amap_codex.cli import main
 from amap_codex.journal import Journal
 from amap_codex.spool import Admission
-from amap_codex.supervisor import Ownership
+from amap_codex.supervisor import Ownership, Supervisor
 from test_cli import configured
 
 
@@ -190,10 +190,11 @@ def test_activity_mcp_offers_only_bounded_read_only_tool_and_survives_invalid_re
 def native_client(monkeypatch, native=None):
     clients = []
     class Client:
-        def __init__(self,*a,**k): self.calls=[];self.stopped=False;clients.append(self)
+        def __init__(self,*a,**k): self.argv=a[0];self.params=[];self.calls=[];self.stopped=False;clients.append(self)
         async def start(self): pass
         async def request(self,method,params):
             self.calls.append(method)
+            self.params.append(params)
             return {'config':native if native is not None else {'mcp_servers':{'personal':{}},'developer_instructions':'EXISTING_POLICY'}}
         async def stop(self): self.stopped=True
     monkeypatch.setattr(interactive,'AppServerClient',Client)
@@ -258,6 +259,109 @@ def test_toml_encoding_round_trips_strings_containing_shell_syntax_and_unicode()
         interactive.toml_value(float('nan'))
 
 
+def test_native_wrapper_keeps_policy_model_and_literal_prompt_and_preflights_overrides(tmp_path, monkeypatch):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    clients = native_client(monkeypatch, {'developer_instructions': 'NATIVE_OVERRIDE', 'mcp_servers': {}})
+    native = ['/installed/codex', '--sandbox', 'danger-full-access', '-a', 'never', '--no-daemon',
+              '--model', 'selected-model', '-c', 'model_reasoning_effort="high"',
+              '--config=developer_instructions="NATIVE_OVERRIDE"', '--enable', 'a-feature',
+              '--add-dir', str(tmp_path/'space here'), '--', 'literal $(do-not-run) `anything`']
+    args = asyncio.run(interactive.interactive_argv(config, path, native_argv=native))
+    assert args[0] == native[0]
+    assert args[4:4+len(native)-3] == native[1:-2]
+    assert args[-2:] == native[-2:]
+    assert clients[0].argv == [native[0], '-c', 'model_reasoning_effort="high"',
+        '-c', 'developer_instructions="NATIVE_OVERRIDE"', '--enable', 'a-feature',
+        'app-server', '--listen', 'stdio://']
+    instructions = tomllib.loads(args[-3])['developer_instructions']
+    assert instructions.startswith('NATIVE_OVERRIDE\n\n')
+    assert config.operator_instructions.read_text() in instructions
+    assert not config.lanes[0].claim_path.exists()
+    assert not (config.state_dir/'journal.sqlite3').exists()
+
+
+@pytest.mark.parametrize('override,assignment', [
+    (['-c', 'mcp_servers.inbox.command="/untrusted"'], 'mcp_servers.inbox.command="/untrusted"'),
+    (['--config=mcp_servers.inbox.command="/untrusted"'], 'mcp_servers.inbox.command="/untrusted"'),
+    (['-cmcp_servers={inbox={command="/untrusted"}}'], 'mcp_servers={inbox={command="/untrusted"}}'),
+])
+def test_native_wrapper_preflight_refuses_reserved_name_from_native_overrides(tmp_path, monkeypatch, override, assignment):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    clients = native_client(monkeypatch, {'mcp_servers': {'inbox': {'command': '/untrusted'}}})
+    with pytest.raises(ValueError, match='reserved'):
+        asyncio.run(interactive.interactive_argv(config, path, native_argv=['codex', *override]))
+    assert clients[0].argv[1:3] == ['-c', assignment]
+    assert clients[0].stopped
+
+
+@pytest.mark.parametrize('tail', [
+    ['resume', '--last'], ['--model', 'model', 'resume'], ['fork'], ['exec'],
+    ['--', 'resume', '--last'],
+])
+def test_native_wrapper_subcommands_are_refused_but_literal_prompt_is_not_a_subcommand(tmp_path, monkeypatch, tail):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    clients = native_client(monkeypatch)
+    if tail[0] == '--':
+        args = asyncio.run(interactive.interactive_argv(config, path, native_argv=['codex', *tail]))
+        assert args[-len(tail):] == tail
+    else:
+        with pytest.raises(ValueError, match='subcommand'):
+            asyncio.run(interactive.interactive_argv(config, path, native_argv=['codex', *tail]))
+        assert not clients
+
+
+@pytest.mark.parametrize('tail', [['-p', 'profile'], ['--profile=profile'], ['-pprofile'],
+                                 ['--remote', 'unix:///server'], ['--worktree'], ['--future-flag'],
+                                 ['--future-flag','value'],
+                                 ['--model'], ['-c', 'invalid']])
+def test_native_wrapper_unsupported_or_incomplete_arguments_fail_before_launch(tmp_path, monkeypatch, tail):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    clients = native_client(monkeypatch)
+    with pytest.raises(ValueError):
+        asyncio.run(interactive.interactive_argv(config, path, native_argv=['codex', *tail]))
+    assert not clients
+
+
+def test_native_wrapper_effective_cwd_and_attached_options(tmp_path, monkeypatch):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    clients = native_client(monkeypatch)
+    native = ['codex', '-C'+str(tmp_path), '-mmodel', '-sread-only', '-anever',
+              '-cdeveloper_instructions="EXISTING_POLICY"', '--disable=apps', '--strict-config']
+    args = asyncio.run(interactive.interactive_argv(config, path, native_argv=native))
+    assert args[2:2+len(native)-1] == native[1:]
+    assert '--cd' not in args
+    assert clients[0].params == [{'cwd': str(tmp_path)}]
+    assert clients[0].argv == ['codex', '-c', 'developer_instructions="EXISTING_POLICY"',
+                              '--disable', 'apps', '--strict-config', 'app-server', '--listen', 'stdio://']
+
+
+def test_native_wrapper_cli_exec_and_json_keep_argv_and_reject_ambiguous_inputs(tmp_path, monkeypatch, capsys):
+    config, path = configured(tmp_path)
+    trusted(config, tmp_path)
+    from amap_codex.config import Config
+    monkeypatch.setattr(Config, 'load', lambda *a, **k: config)
+    native_client(monkeypatch)
+    executed = []
+    monkeypatch.setattr('os.execvp', lambda binary, args: executed.append((binary, args)))
+    native = ['--', '/selected/codex', '--sandbox', 'read-only', '--', 'literal $(unchanged)']
+    assert main(['--config', str(path), 'interactive', *native]) == 0
+    assert executed[0][0] == '/selected/codex'
+    assert executed[0][1][-2:] == ['--', 'literal $(unchanged)']
+    capsys.readouterr()
+    assert main(['--config', str(path), 'interactive-args', *native]) == 0
+    assert json.loads(capsys.readouterr().out) == executed[0][1]
+    for conflict in (['--binary', 'other'], ['--prompt', 'other']):
+        assert main(['--config', str(path), 'interactive', *conflict, *native]) == 1
+    assert main(['--config', str(path), 'interactive', '--']) == 1
+    assert main(['--config', str(path), 'interactive', 'codex']) == 1
+    assert len(executed) == 1
+
+
 def test_limits_newest_order_and_unknown_send_outcome(tmp_path):
     config,_ = configured(tmp_path)
     with produced(config) as journal:
@@ -282,3 +386,137 @@ def test_uncertain_work_is_visible_and_never_replayed_by_inspection(tmp_path):
             assert value['events'][0]['state']=='uncertain'
         assert journal.event('event-private')['state']=='uncertain'
         assert journal.db.execute('SELECT COUNT(*) FROM attempts').fetchone()[0]==1
+
+
+def test_fresh_outbox_is_explicitly_no_results_yet_and_not_created_by_observation(tmp_path):
+    config,_=configured(tmp_path)
+    outbox=tmp_path/'fresh-outbox'
+    outbox.mkdir()
+    (outbox/'req-00000001.json').write_text('PRIVATE_BODY')
+    value=interactive.read_activity(config,outbox=outbox)
+    assert value['outbound']['state']=='no_results_yet'
+    assert value['outbound']['results']==[]
+    assert value['outbound']['queued_request_files']==['req-00000001.json']
+    assert not (outbox/'results').exists()
+    assert not (config.state_dir/'journal.sqlite3').exists()
+    (outbox/'results').symlink_to(tmp_path/'missing')
+    with pytest.raises(ValueError,match='results'):
+        interactive.read_activity(config,outbox=outbox)
+    (outbox/'results').unlink()
+    (outbox/'results').write_text('not a directory')
+    with pytest.raises(ValueError,match='results'):
+        interactive.read_activity(config,outbox=outbox)
+
+
+@pytest.mark.parametrize('fault,check',[(None,None),('stale','fresh_heartbeat'),
+    ('configuration','configuration_matches'),('build','codex_build_matches'),
+    ('snapshot_thread','snapshot_matches_binding'),('snapshot_instance','snapshot_matches_binding'),
+    ('snapshot_fingerprint','snapshot_matches_binding'),('released_snapshot','snapshot_matches_binding'),
+    ('owner','live_claims_match_snapshot_owner'),('released','live_claims_match_snapshot_owner'),
+    ('dispatching','dispatch_resolved'),('uncertain','dispatch_resolved'),
+    ('operator_uncertain','dispatch_resolved'),('error','operational_error_clear'),
+    ('blocked','blocked_requests_clear')])
+def test_ready_requires_real_producer_binding_owner_and_reconciliation(tmp_path,fault,check):
+    config,_=configured(tmp_path)
+    with produced(config) as journal, Ownership(config) as owned:
+        if fault=='uncertain':
+            journal.uncertain('event-private','acceptance unknown')
+        elif fault!='dispatching':
+            journal.accept('event-private','turn-a')
+            journal.finish('event-private','completed')
+        if fault=='operator_uncertain':
+            journal.begin_operator('operator-a',9)
+            journal.operator_result('operator-a','uncertain')
+        supervisor=Supervisor(config)
+        supervisor.journal=journal
+        supervisor.ownership=owned
+        if fault=='blocked':
+            supervisor.delivery.client.blocked.append({'method':'approval'})
+        supervisor.write_status()
+        path=config.state_dir/'status.json'
+        snapshot=json.loads(path.read_text())
+        if fault=='stale': snapshot['updated_at']=0
+        if fault=='snapshot_thread': snapshot['thread_id']='another-thread'
+        if fault=='snapshot_instance': snapshot['instance_id']='another-instance'
+        if fault=='snapshot_fingerprint': snapshot['fingerprint']='another-fingerprint'
+        if fault=='released_snapshot': snapshot['claim_state']='released'
+        if fault=='owner': snapshot['supervisor_pid']+=1000000
+        path.write_text(json.dumps(snapshot))
+        if fault=='configuration': config.operator_instructions.write_text('Changed policy requires migration')
+        if fault=='build': config.codex_version='codex-cli 9.9.9'
+        if fault=='released': owned.release()
+        if fault=='error': journal.operational_error('unresolved failure')
+        before=(config.state_dir/'journal.sqlite3').read_bytes()
+        value=interactive.read_activity(config)
+        assert (config.state_dir/'journal.sqlite3').read_bytes()==before
+        if fault:
+            assert value['readiness']['state']=='not_ready'
+            assert value['readiness']['checks'][check]=='fail'
+        else:
+            assert value['readiness']['state']=='ready'
+            assert set(value['readiness']['checks'].values())=={'pass'}
+
+
+def test_readiness_without_binding_or_snapshot_stays_explicit(tmp_path):
+    config,_=configured(tmp_path)
+    assert interactive.read_activity(config)['readiness']['state']=='not_started'
+    with Journal(config.state_dir,config.instance_id,config.fingerprint(),config.codex_version,config.codex_model) as journal, Ownership(config) as owned:
+        supervisor=Supervisor(config);supervisor.journal=journal;supervisor.ownership=owned
+        supervisor.write_status()
+        value=interactive.read_activity(config)
+        assert value['readiness']['state']=='not_ready'
+        assert value['readiness']['checks']['thread_bound']=='fail'
+        journal.bind_thread('thread-bound')
+        supervisor.write_status()
+        path=config.state_dir/'status.json'
+        path.unlink()
+        value=interactive.read_activity(config)
+        assert value['readiness']['state']=='unknown'
+        assert value['readiness']['checks']['fresh_heartbeat']=='unknown'
+        for malformed in ['["supervisor_pid"]','not-json']:
+            path.write_text(malformed)
+            assert interactive.read_activity(config)['readiness']['state']=='unknown'
+        supervisor.write_status()
+        snapshot=json.loads(path.read_text());snapshot['supervisor_pid']=0
+        path.write_text(json.dumps(snapshot))
+        assert interactive.read_activity(config)['readiness']['state']=='unknown'
+        supervisor.write_status()
+        config.lanes[0].claim_path.write_text('[]')
+        value=interactive.read_activity(config)
+        assert value['status']['claim_state']['mail']=='unreadable'
+        assert value['readiness']['checks']['live_claims_match_snapshot_owner']=='unknown'
+        for pid in [None,True,0,'unknown']:
+            config.lanes[0].claim_path.write_text(json.dumps({'pid':pid}))
+            assert interactive.read_activity(config)['readiness']['checks']['live_claims_match_snapshot_owner']=='unknown'
+
+
+def test_readiness_never_infers_remote_ownership_from_local_pid(tmp_path):
+    from amap_codex.cli import read_status
+    config,_=configured(tmp_path)
+    with produced(config) as journal, Ownership(config) as owned:
+        journal.accept('event-private','turn-a'); journal.finish('event-private','completed')
+        supervisor=Supervisor(config);supervisor.journal=journal;supervisor.ownership=owned
+        supervisor.write_status()
+        local_status=read_status(config)
+        config.launcher_control_argv=['not-executed']
+        config.deployment_id='remote';config.owner_domain='remote'
+        value=interactive.supervisor_readiness(config,local_status,'fresh')
+        assert value['state']!='ready'
+        assert value['checks']['live_claims_match_snapshot_owner']=='unknown'
+
+
+@pytest.mark.parametrize('argv',[None,42,{},'codex',[],[''],[None],['codex',None],['co\0dex']])
+def test_native_wrapper_rejects_invalid_argument_vectors(argv):
+    with pytest.raises(ValueError,match='native argv'):
+        interactive.native_interactive_args(argv,'/workspace')
+
+
+def test_native_wrapper_does_not_duplicate_native_cwd_or_terminal_options(tmp_path,monkeypatch):
+    config,path=configured(tmp_path)
+    trusted(config,tmp_path)
+    native_client(monkeypatch)
+    native=['codex','--no-alt-screen','--cd',str(tmp_path)]
+    argv=asyncio.run(interactive.interactive_argv(config,path,native_argv=native))
+    assert argv[:len(native)]==native
+    assert argv.count('--no-alt-screen')==1
+    assert argv.count('--cd')==1

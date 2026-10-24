@@ -49,6 +49,8 @@ def read_status(config):
         else:
             try:
                 owner = json.loads(lane.claim_path.read_text())
+                if not isinstance(owner, dict):
+                    raise ValueError('claim owner must be an object')
                 if config.launcher_control_argv:
                     claims[lane.name] = "requires_runtime_inspection"
                 else:
@@ -61,6 +63,8 @@ def read_status(config):
     if snapshot.is_file() and not snapshot.is_symlink():
         try:
             recorded = json.loads(snapshot.read_text())
+            if not isinstance(recorded, dict):
+                recorded = {}
             for key in ("backlog", "blocked_requests", "supervisor_pid", "updated_at"):
                 if key in recorded:
                     status[key] = recorded[key]
@@ -105,10 +109,12 @@ def main(argv=None):
     activity_mcp.add_argument('--outbox-dir', type=Path)
     for name in ('interactive', 'interactive-args'):
         interactive = commands.add_parser(name, help='launch native Codex with AMAP tools, or print its argv as JSON')
-        interactive.add_argument('--binary', default='codex')
+        interactive.add_argument('--binary')
         interactive.add_argument('--outbox-dir', type=Path)
         if name == 'interactive':
             interactive.add_argument('--prompt')
+        interactive.add_argument('native_argv', nargs=argparse.REMAINDER,
+                                 help='-- BINARY [native options] [-- literal prompt]; new conversations only')
     doctor = commands.add_parser("doctor", help="check local paths/config; does not send a notice")
     doctor.add_argument("--probe", action="store_true", help="also initialize/start or resume app-server")
     kickoff = commands.add_parser('kickoff', help='queue privileged work on the existing controller')
@@ -165,7 +171,15 @@ def main(argv=None):
             serve_activity(config, outbox=args.outbox_dir)
         elif args.command in {'interactive', 'interactive-args'}:
             from .interactive import interactive_argv
-            argv = asyncio.run(interactive_argv(config, args.config, binary=args.binary, outbox=args.outbox_dir))
+            native = args.native_argv
+            if native:
+                if native[0] != '--' or len(native) < 2:
+                    raise ValueError('native argv must follow -- and include the Codex binary')
+                native = native[1:]
+                if getattr(args, 'prompt', None) is not None:
+                    raise ValueError('use either --prompt or a native argv, not both')
+            argv = asyncio.run(interactive_argv(config, args.config, binary=args.binary,
+                                               outbox=args.outbox_dir, native_argv=native or None))
             if args.command == 'interactive-args':
                 print(json.dumps(argv))
             else:

@@ -41,6 +41,35 @@ optional initial interactive prompt as a literal argument. No shell interpolatio
 is performed. A failure is reported; the connector never falls back to launching
 an apparently connected but unconfigured session.
 
+A generic adapter wrapper can pass its native argument vector directly:
+
+```sh
+amap-codex --config "$CONNECTOR_CONFIG" interactive --outbox-dir "$CONNECTOR_OUTBOX" -- codex --sandbox read-only -a on-request --no-daemon --model "$CODEX_MODEL" -c 'model_reasoning_effort="high"'
+```
+
+The first `--` ends connector options; the next argument is the actual Codex
+binary, which is also used for preflight. Native option tokens keep their order
+and contents, including sandbox, approval, model, reasoning, additional-directory
+and feature options. A literal prompt must follow a second `--`. Use this form
+instead of combining it with connector `--binary` or `--prompt`.
+
+Native `-c`/`--config` and feature overrides also reach the app-server preflight.
+The resulting MCP registry is checked for all four reserved AMAP names, and
+effective native developer instructions are retained before the fleet policy and
+interactive guidance are added. The connector appends its MCP/instruction
+options after native options and before any literal prompt. It supplies the
+configured cwd as a default; a native `--cd` overrides it and selects the cwd
+used by preflight too. No shell parses this argument vector.
+
+This passthrough accepts new local interactive conversations only. It explicitly
+refuses native subcommands, including `resume` and `fork`, remote connections,
+managed worktree launches and unknown options. Native `--profile`/`-p` is also
+refused: the reviewed app-server preflight cannot load that CLI profile, so it
+cannot establish its effective registry and instructions. The adapter must report
+these failures and must not strip an option, drop `resume`, or fall back to bare
+Codex. Ordinary ambient native configuration remains supported. This limitation
+also applies when generating an argv with `interactive-args`.
+
 For messaging, look up the intended recipient using `inbox_submit.peers`. Codex's
 local subagent list does not discover fleet peers. Submit only within the
 operator's authority and inspect `submit_result`; queued requests are inert,
@@ -70,6 +99,23 @@ of ten seconds or three configured polling intervals. Missing timestamps are
 `unknown`. These labels describe a recorded heartbeat, not router connectivity.
 Before first startup, state is `not_started`; inspection creates no journal.
 
+For bounded startup waits, use `readiness.state`, not heartbeat alone. `ready`
+requires a bound thread, matching configuration/build, a fresh supervisor
+snapshot with held claims and matching local claim-owner PID, no unresolved
+dispatch, no operational error and no blocked requests. Every readiness check
+is labelled `pass`, `fail` or `unknown`. Other states are `not_started`,
+`not_ready` and `unknown`; none is permission to launch a second receiver.
+Checks consider all unresolved operator runs even when display output is limited.
+A recent snapshot from a previous process cannot establish the new owner is ready.
+Controlled execution in another PID domain remains `unknown` for local ownership;
+the adapter must establish its runtime evidence separately.
+
+Readiness describes local startup, not idleness, router reachability, installed
+payload revision or the adapter's own hold state. An adapter must also check its
+configuration identity, hold marker and installed payload through its normal
+verification. Inspection and the interactive launcher remain usable to diagnose
+a supervisor that is not ready; neither performs recovery or clears an error.
+
 For outbound visibility, supply the runtime's explicit outbox directory to both
 the interactive launcher and monitor:
 
@@ -78,8 +124,12 @@ amap-codex --config /etc/amap-connector/connector.toml interactive --outbox-dir 
 amap-codex --config /etc/amap-connector/connector.toml activity --follow --outbox-dir /amap/outbound/dropbox
 ```
 
-This directory must be the existing contract drop box with a readable `results/`
-subdirectory. The connector does not infer it from opaque MCP commands or adapter
+This directory must be the existing contract drop box. A missing `results/`
+subdirectory is reported as `no_results_yet` and is not created by inspection;
+the runtime may publish its first result after the interactive session starts.
+This absence does not establish that no messages have been sent. A symlink or
+non-directory at `results/` is still refused. The connector does not infer the
+drop box from opaque MCP commands or adapter
 environment variables. Without it, outbound observation is `not_configured`,
 not an empty successful send history. The view lists queued request filenames
 and bounded recent runtime results: request/message IDs, outcome, reason code
@@ -118,7 +168,11 @@ amap-codex --config /etc/amap-connector/connector.toml interactive-args
 
 It returns the complete argument vector as JSON after the same preflight. Parse
 that JSON and pass an argument array directly; do not join it into a shell command
-or split it on whitespace. It contains developer instructions and local paths,
+or split it on whitespace. Index zero is the binary; following elements are
+root-level native options, followed only by an optional `--` and literal prompt.
+There is no native subcommand in this vector. To merge adapter options, pass
+them to `interactive-args -- BINARY ...` before preflight rather than appending
+them to an already generated vector. It contains developer instructions and local paths,
 so retain it locally. Do not copy arbitrary live arguments into public evidence.
 Do not persist these registrations in a shared Codex home: supervisor startup
 rejects ambient registrations that collide with its trusted names.

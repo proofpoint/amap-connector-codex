@@ -102,6 +102,29 @@ review of 0.164.0. The reviewed-build list remains unchanged. Reproduce startup
 without inference by omitting `--infer`; keep optional `--diagnostics` logs private.
 See [the interactive contract](../docs/INTERACTIVE.md) for adapter acceptance.
 
+### Native wrapper and fresh-start follow-up (0.164.0)
+
+[interactive-wrapper-0.164.0.json](interactive-wrapper-0.164.0.json) records
+actual native CLI parsing and four-server initialization with a supplied native
+argument vector, including sandbox/approval, reasoning, `--no-daemon`, explicit
+cwd and terminal options. Defaults do not duplicate native cwd/terminal flags.
+The synthetic outbox had no `results/` directory. Startup succeeded without
+creating results, a journal or a claim; no inference or submission was requested.
+
+Producer-backed regressions cover local readiness, including a recent snapshot
+from another owner, configuration/build mismatch, unresolved delivery/operator
+dispatch, operational errors, blocked requests and unreadable metadata. Missing
+evidence stays unknown, and remote ownership is not inferred from a local PID.
+The readiness view was also read against an existing local supervisor. It does
+not establish router health, adapter hold clearance or an installed payload pin.
+
+The native preflight was measured to retain `-c` developer instructions and
+refuse reserved MCP names introduced by separate, attached and long-form config
+options. Resume/fork, raw positional prompts, profiles and remote/worktree modes
+are explicitly unsupported by this initial wrapper contract; literal prompts
+use native `--`. These are refusals, not silently dropped arguments. No native
+TUI or complete deployment acceptance is claimed by these connector probes.
+
 ## codex-cli 0.161.0 (reviewed October 7, 2026; Linux aarch64)
 
 Probes that need no login, each also re-run on 0.160.1 for comparison:

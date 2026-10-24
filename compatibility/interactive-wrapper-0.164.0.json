@@ -1,0 +1,14 @@
+{
+  "timestamp_utc": "2026-10-24T14:05:30.882738+00:00",
+  "codex_version": "codex-cli 0.164.0",
+  "scope": "real native CLI configuration and synthetic MCP tools; no native TUI mirroring, isolation or router attestation",
+  "native_argv_parsed": true,
+  "four_amap_servers_initialized": true,
+  "native_argv_preserved": true,
+  "interactive_guidance_present": true,
+  "inference": false,
+  "submissions": 0,
+  "fresh_outbox_supported": true,
+  "no_journal_or_claim_created": true,
+  "passed": true
+}
