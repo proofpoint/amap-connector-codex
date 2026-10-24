@@ -48,6 +48,11 @@ assets and arrange visible terminal surfaces through their generic launch
 facilities. No native transcript mirroring or dual ownership is implied.
 See [INTERACTIVE.md](INTERACTIVE.md) for commands and adapter acceptance criteria.
 
+The next proposed mode uses one canonical conversation for operator input and
+incoming work. [UNIFIED.md](UNIFIED.md) records its staged implementation plan,
+the successful native-TUI feasibility probe, ownership and migration constraints,
+and remaining production gates. It does not change this release's delivery mode.
+
 ## 2. Scope
 
 | Include in v0.1 | Defer |
