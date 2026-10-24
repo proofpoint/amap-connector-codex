@@ -22,7 +22,7 @@ async def probe(output, infer=False, diagnostics=None):
     build = subprocess.check_output(['codex','--version'],text=True).splitlines()[0]
     with tempfile.TemporaryDirectory(prefix='amap-interactive-probe-') as directory:
         root = Path(directory)
-        for name in ('mail/notices','mail/messages','peer/messages','outbox/results','roster','state'):
+        for name in ('mail/notices','mail/messages','peer/messages','outbox','roster','state'):
             (root/name).mkdir(parents=True,exist_ok=True,mode=0o700)
         (root/'instructions.md').write_text('Use only the synthetic MCP tools requested by the operator. Do not send or execute commands.')
         (root/'roster/roster.json').write_text(json.dumps({'contract_version':'2','written_at':datetime.now(timezone.utc).isoformat(),
@@ -48,7 +48,10 @@ async def probe(output, infer=False, diagnostics=None):
         path = root/'connector.toml'
         path.write_text('\n'.join(k+'='+toml_value(v) for k,v in doc.items())+'\n')
         config = Config.load(path,create_state=False)
-        argv = await interactive_argv(config,path,outbox=root/'outbox')
+        native = ['codex','--sandbox','read-only','--ask-for-approval','never',
+                  '--no-daemon','--no-alt-screen','--cd',str(root),'-c','model_reasoning_effort="low"']
+        argv = await interactive_argv(config,path,outbox=root/'outbox',native_argv=native)
+        assert argv[:len(native)] == native
         # Exercise the actual native argv produced by the launcher. This
         # creates no thread and writes no personal Codex configuration.
         listed = subprocess.run([*argv,'mcp','list','--json'],capture_output=True,text=True,check=True,timeout=30)
@@ -71,7 +74,7 @@ async def probe(output, infer=False, diagnostics=None):
         evidence = {'timestamp_utc':datetime.now(timezone.utc).isoformat(),'codex_version':build,
             'scope':'real native CLI configuration and synthetic MCP tools; no native TUI mirroring, isolation or router attestation',
             'native_argv_parsed':True,'four_amap_servers_initialized':True,
-            'interactive_guidance_present':True,'inference':infer,'submissions':0}
+            'native_argv_preserved':True,'interactive_guidance_present':True,'inference':infer,'submissions':0}
         if infer:
             prompt = ('Call inbox_submit.peers with query controller, then amap_fleet.activity. '
                       'Do not call any other tools or send messages. State whether AMAP uses the local '
@@ -93,7 +96,8 @@ async def probe(output, infer=False, diagnostics=None):
             evidence.update(native_cli_called_peers=True,native_cli_called_activity=True,marker_returned=True)
         assert not list((root/'outbox').glob('req-*.json'))
         assert not (root/'state/journal.sqlite3').exists() and not (root/'claim').exists()
-        evidence.update(no_journal_or_claim_created=True,passed=True)
+        assert not (root/'outbox/results').exists()
+        evidence.update(fresh_outbox_supported=True,no_journal_or_claim_created=True,passed=True)
         output.write_text(json.dumps(evidence,indent=2)+'\n')
         print(json.dumps(evidence))
 

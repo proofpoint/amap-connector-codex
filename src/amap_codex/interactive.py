@@ -38,6 +38,67 @@ def check_limit(limit):
         raise ValueError('activity limit must be an integer from 1 to 100')
 
 
+def supervisor_readiness(config, status, heartbeat):
+    """Local startup evidence, not router health or adapter hold inspection."""
+    try:
+        raw, _ = _read(config.state_dir, 'status.json')
+        snapshot = json.loads(raw)
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+    except (OSError, ValueError):
+        snapshot = {}
+    claims = status.get('claim_state', {})
+    same_owner = True
+    if config.launcher_control_argv:
+        # A host PID is not evidence about an execution in another domain.
+        same_owner = None
+    else:
+        for lane in config.lanes:
+            state = claims.get(lane.name)
+            if state in {'unclaimed', 'stale'}:
+                same_owner = False
+                break
+            try:
+                raw, _ = _read(lane.claim_path.parent, lane.claim_path.name)
+                owner = json.loads(raw)
+                if state != 'live' or not isinstance(owner, dict):
+                    raise ValueError('claim owner unavailable')
+                if type(owner.get('pid')) is not int or owner['pid'] <= 0:
+                    raise ValueError('claim owner PID unavailable')
+                if type(snapshot.get('supervisor_pid')) is not int or snapshot['supervisor_pid'] <= 0:
+                    same_owner = None
+                    continue
+                if owner.get('pid') != snapshot['supervisor_pid']:
+                    same_owner = False
+                    break
+            except (OSError, ValueError):
+                same_owner = None
+    counts = status.get('counts', {})
+    unresolved = any(counts.get(s, 0) for s in ('dispatching', 'uncertain')) or any(
+        r['state'] in {'dispatching', 'uncertain'} for r in status.get('operator_runs', []))
+    checks = {
+        'fresh_heartbeat': None if heartbeat == 'unknown' else heartbeat == 'fresh',
+        'configuration_matches': None if 'fingerprint' not in status else status['fingerprint'] == config.fingerprint(),
+        'codex_build_matches': None if 'codex_version' not in status else status['codex_version'] == config.codex_version,
+        'thread_bound': bool(status.get('thread_id')),
+        'snapshot_matches_binding': None if not snapshot else (
+            snapshot.get('instance_id') == config.instance_id and
+            snapshot.get('thread_id') == status.get('thread_id') and
+            snapshot.get('fingerprint') == status.get('fingerprint') and
+            snapshot.get('claim_state') == 'held'),
+        'live_claims_match_snapshot_owner': same_owner,
+        'dispatch_resolved': not unresolved,
+        'operational_error_clear': status.get('last_error') is None,
+        'blocked_requests_clear': None if 'blocked_requests' not in status else not status['blocked_requests'],
+    }
+    labels = {key: 'unknown' if value is None else 'pass' if value else 'fail' for key, value in checks.items()}
+    state = ('not_started' if status.get('state') == 'not_started' else
+             'not_ready' if False in checks.values() else
+             'unknown' if None in checks.values() else 'ready')
+    return {'state': state, 'checks': labels,
+            'meaning': 'local supervisor startup evidence; not proof of idle state, router connectivity or adapter hold clearance'}
+
+
 def read_activity(config, *, limit=20, outbox=None):
     """Bounded metadata snapshot. A finished delivery is not a review verdict."""
     from .cli import read_status
@@ -61,19 +122,21 @@ def read_activity(config, *, limit=20, outbox=None):
             db.close()
     # read_status includes every operator run for recovery tooling. Keep the
     # interactive surface bounded, with the newest first, and no instructions.
-    status['operator_runs'] = list(reversed(status.get('operator_runs', [])))[:limit]
     stamp = status.get('updated_at')
     result['heartbeat'] = ('unknown' if not isinstance(stamp, (int, float)) else
                            'fresh' if 0 <= time.time()-stamp <= max(10, config.poll_interval_ms/1000*3)
                            else 'stale')
+    result['readiness'] = supervisor_readiness(config, status, result['heartbeat'])
+    status['operator_runs'] = list(reversed(status.get('operator_runs', [])))[:limit]
     if outbox is not None:
         outbox = Path(outbox)
         if not outbox.is_absolute() or outbox.is_symlink() or not outbox.is_dir():
             raise ValueError('outbox must be an explicit existing directory')
         results = outbox/'results'
-        if results.is_symlink() or not results.is_dir():
-            raise ValueError('outbox results must be an existing directory, not a symlink')
-        latest = sorted(results.glob('*.json'), key=lambda p: p.lstat().st_mtime, reverse=True)[:limit]
+        if results.is_symlink() or (results.exists() and not results.is_dir()):
+            raise ValueError('outbox results must be a directory when present, not a symlink')
+        has_results = results.is_dir()
+        latest = sorted(results.glob('*.json'), key=lambda p: p.lstat().st_mtime, reverse=True)[:limit] if has_results else []
         records = []
         for path in latest:
             try:
@@ -91,7 +154,7 @@ def read_activity(config, *, limit=20, outbox=None):
             except (OSError, ValueError, AttributeError):
                 records.append({'state': 'unreadable_result', 'file': path.name})
         queued = sorted(p.name for p in outbox.glob('req-*.json'))[:limit]
-        result['outbound'] = {'state': 'observed', 'queued_request_files': queued, 'results': records,
+        result['outbound'] = {'state': 'observed' if has_results else 'no_results_yet', 'queued_request_files': queued, 'results': records,
                               'meaning': 'queued is inert; accepted is runtime acceptance, not peer completion'}
     return result
 
@@ -175,16 +238,84 @@ def toml_value(value):
     raise ValueError('unsupported interactive configuration value')
 
 
-async def interactive_argv(config, config_path, *, binary='codex', outbox=None):
+def native_interactive_args(argv, default_cwd):
+    """Keep native tokens intact, separating options from a literal prompt.
+
+    An explicit option vocabulary lets us reject subcommands rather than
+    accidentally applying interactive-only preflight to resume or remote work.
+    Configuration overrides also reach the preflight process.
+    """
+    if not isinstance(argv, (list, tuple)) or not argv or not argv[0] or not all(isinstance(arg, str) and '\0' not in arg for arg in argv):
+        raise ValueError('native argv requires a binary and string arguments')
+    binary, tail = argv[0], list(argv[1:])
+    options, prompt, preflight = [], [], []
+    cwd = default_cwd
+    explicit_cwd = False
+    explicit_no_alt_screen = False
+    flags = {'--no-alt-screen', '--no-daemon', '--search', '--oss', '--approve-for-me',
+             '--full-auto', '--dangerously-bypass-approvals-and-sandbox',
+             '--dangerously-bypass-hook-trust', '--strict-config', '--help', '-h', '--version', '-V'}
+    values = {'-c', '--config', '-m', '--model', '-s', '--sandbox', '-a', '--ask-for-approval',
+              '-C', '--cd', '-i', '--image', '--local-provider', '--add-dir', '--enable', '--disable'}
+    index = 0
+    while index < len(tail):
+        token = tail[index]
+        if token == '--':
+            prompt = tail[index:]
+            break
+        if token in flags:
+            options.append(token)
+            if token == '--no-alt-screen':
+                explicit_no_alt_screen = True
+            if token == '--strict-config':
+                preflight.append(token)
+            index += 1
+            continue
+        name, equal, value = token.partition('=')
+        if not token.startswith('--') and len(token) > 2 and token[:2] in {'-c', '-m', '-s', '-a', '-C', '-i', '-p'}:
+            name, equal, value = token[:2], '=', token[2:].removeprefix('=')
+        if name in {'-p', '--profile'}:
+            raise ValueError('native --profile is unsupported: app-server preflight cannot load that profile')
+        if name not in values:
+            raise ValueError('unsupported native option or subcommand; resume/fork and remote launches are refused; '
+                             'put a literal prompt after native --')
+        start = index
+        if not equal:
+            index += 1
+            if index >= len(tail):
+                raise ValueError('native option requires a value')
+            value = tail[index]
+        if name in {'-c', '--config'}:
+            if '=' not in value:
+                raise ValueError('native configuration override requires key=value')
+            preflight += ['-c', value]
+        elif name in {'--enable', '--disable'}:
+            preflight += [name, value]
+        elif name in {'-C', '--cd'}:
+            cwd = str(Path(value).resolve())
+            explicit_cwd = True
+        options += tail[start:index+1]
+        index += 1
+    defaults = [] if explicit_no_alt_screen else ['--no-alt-screen']
+    if not explicit_cwd:
+        defaults += ['--cd', default_cwd]
+    return binary, defaults + options, prompt, preflight, cwd
+
+
+async def interactive_argv(config, config_path, *, binary=None, outbox=None, native_argv=None):
+    if native_argv is not None and binary is not None:
+        raise ValueError('use either --binary or a native argv, not both')
+    binary, options, prompt, preflight, cwd = native_interactive_args(
+        native_argv if native_argv is not None else [binary or 'codex'], config.cwd)
     trusted = config.trusted_overrides()
     if trusted is None:
         raise ValueError('interactive participation requires a protected trusted_config_file')
     # Inspect native configuration without starting/resuming any conversation.
-    client = AppServerClient([binary, 'app-server', '--listen', 'stdio://'],
+    client = AppServerClient([binary, *preflight, 'app-server', '--listen', 'stdio://'],
                              expected_version=config.codex_version, timeout=config.rpc_timeout_seconds)
     try:
         await client.start()
-        native = (await client.request('config/read', {'cwd': config.cwd})).get('config')
+        native = (await client.request('config/read', {'cwd': cwd})).get('config')
         if not isinstance(native, dict):
             raise ValueError('native Codex configuration unavailable')
         servers = native.get('mcp_servers') or {}
@@ -207,7 +338,7 @@ async def interactive_argv(config, config_path, *, binary='codex', outbox=None):
     instructions = existing + '\n\n' + config.operator_instructions.read_text() + '\n\n' + GUIDANCE
     # Only messaging and guidance are changed. Model, sandbox, approval,
     # network, authentication and ambient tools retain their native settings.
-    argv = [binary, '--no-alt-screen', '--cd', config.cwd]
+    argv = [binary, *options]
     for name, server in servers.items():
         argv += ['-c', 'mcp_servers.'+name+'='+toml_value(server)]
-    return argv + ['-c', 'developer_instructions='+toml_value(instructions)]
+    return argv + ['-c', 'developer_instructions='+toml_value(instructions), *prompt]
