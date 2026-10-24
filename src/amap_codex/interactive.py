@@ -89,7 +89,7 @@ def supervisor_readiness(config, status, heartbeat):
         'live_claims_match_snapshot_owner': same_owner,
         'dispatch_resolved': not unresolved,
         'operational_error_clear': status.get('last_error') is None,
-        'blocked_requests_clear': None if 'blocked_requests' not in status else not status['blocked_requests'],
+        'blocked_requests_clear': None if not isinstance(status.get('blocked_requests'), list) else not status['blocked_requests'],
     }
     labels = {key: 'unknown' if value is None else 'pass' if value else 'fail' for key, value in checks.items()}
     state = ('not_started' if status.get('state') == 'not_started' else

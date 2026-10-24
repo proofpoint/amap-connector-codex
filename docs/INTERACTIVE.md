@@ -106,6 +106,8 @@ dispatch, no operational error and no blocked requests. Every readiness check
 is labelled `pass`, `fail` or `unknown`. Other states are `not_started`,
 `not_ready` and `unknown`; none is permission to launch a second receiver.
 Checks consider all unresolved operator runs even when display output is limited.
+Only a valid empty blocked-request list establishes clear evidence; malformed
+or missing fields remain unknown, including JSON null and other falsey values.
 A recent snapshot from a previous process cannot establish the new owner is ready.
 Controlled execution in another PID domain remains `unknown` for local ownership;
 the adapter must establish its runtime evidence separately.
@@ -204,3 +206,9 @@ verified ownership design.
 The native settings used here are documented in the official
 [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
 and [MCP guide](https://learn.chatgpt.com/docs/extend/mcp).
+
+The opt-in negative-control inventory is reproducible with the existing test
+interpreter: `python tests/mutations/interactive.py`. Each mutation runs against
+an independent scratch copy and its named assertion; the working sources and
+fleet state are never mutated. It requires the matching source/tests and pytest,
+and does not require native Codex, network access or a logged-in account.
