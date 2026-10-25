@@ -61,7 +61,7 @@ class AttachPolicy:
         if params.get('runtimeWorkspaceRoots') is not None and params['runtimeWorkspaceRoots'] != self.roots:
             raise ProtocolError('native request changes registered workspace roots')
         forbidden = {'config', 'baseInstructions', 'developerInstructions', 'history', 'path',
-                     'permissions', 'environments', 'disabledPluginIds'}
+                     'permissions', 'environments', 'disabledPluginIds', 'modelProvider'}
         if any(params.get(key) is not None for key in forbidden):
             raise ProtocolError('native request attempts an unsupported protected configuration change')
         if params.get('toolOutput') is not None:

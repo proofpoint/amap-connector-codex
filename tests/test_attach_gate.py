@@ -29,6 +29,7 @@ def test_native_controls_preserve_canonical_thread_and_pane_settings(method, par
     ('runtimeWorkspaceRoots', ['/workspace', '/foreign']), ('config', {}), ('baseInstructions', 'override'),
     ('developerInstructions', 'override'), ('history', []), ('path', '/foreign'), ('permissions', 'full'),
     ('approvalsReviewer', 'automatic'), ('environments', []), ('disabledPluginIds', []), ('toolOutput', {}),
+    ('modelProvider', 'foreign'),
     ('collaborationMode', {'mode': 'default', 'settings': {'model': 'foreign'}}),
     ('collaborationMode', {'mode': 'foreign', 'settings': {'model': 'selected'}}),
 ])
