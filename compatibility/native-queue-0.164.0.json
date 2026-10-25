@@ -1,5 +1,5 @@
 {
-  "timestamp_utc": "2026-10-25T12:41:14.151604+00:00",
+  "timestamp_utc": "2026-10-25T18:19:50.858012+00:00",
   "codex_version": "codex-cli 0.164.0",
   "os": "Linux",
   "architecture": "aarch64",
@@ -20,6 +20,9 @@
     "pending_immediately_after_resume": 1,
     "queued_inputs_execute_once_after_crash": true,
     "history_client_id_and_content_match": true,
+    "retained_add_receipts_bound_before_crash": true,
+    "distinct_completed_turn_per_retained_input": true,
+    "provider_active_inputs_match_intended_dispatches": true,
     "interrupted_human_not_replayed": true,
     "provider_requests_after_resume": 3
   },

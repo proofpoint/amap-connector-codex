@@ -23,6 +23,23 @@ def main():
          'if self.request_handler is not None:', 'if False:',
          'tests/test_unified_probe.py::test_probe_passive_observer_does_not_answer_server_approval'),
     ]
+    pre = 'tests/test_native_queue_probe.py::test_recovery_precrash_requires_exact_intended_membership'
+    post = 'tests/test_native_queue_probe.py::test_recovery_rejects_substitution_missing_inputs_and_human_replay'
+    cases.extend([
+        (evidence, 'exact two intended add receipts', 'assert len(retained) == 2,', 'assert True,', pre+'[extra_add_receipt]'),
+        (evidence, 'distinct intended clients', "assert len({s['clientUserMessageId'] for s in retained}) == 2,", 'assert True,', pre+'[duplicate_add_client]'),
+        (evidence, 'distinct intended complete inputs', "assert len({json.dumps(s['input'], sort_keys=True) for s in retained}) == 2,", 'assert True,', pre+'[duplicate_add_input]'),
+        (evidence, 'exact pre-crash membership count', 'assert len(pending) == 2,', 'assert True,', pre+'[extra_pending]'),
+        (evidence, 'pre-crash client association', "assert found[0]['clientUserMessageId'] == receipt['clientUserMessageId'],", 'assert True,', pre+'[substitute_client]'),
+        (evidence, 'pre-crash full input association', "assert found[0]['input'] == receipt['input'],", 'assert True,', pre+'[substitute_input]'),
+        (evidence, 'bind original human text', "assert item['content'][0]['text'] == human_text,", 'assert True,', pre+'[wrong_human]'),
+        (evidence, 'no extra original human replay', 'assert len(originals) == 3,', 'assert True,', post+'[human_replay]'),
+        (evidence, 'preserve exact original human identity', 'assert original_human == [human],', 'assert True,', post+'[human_replaced]'),
+        (evidence, 'distinct observed execution turns', 'assert len(turns) == 2 and len(set(turns)) == 2,', 'assert True,', post+'[same_execution_and_observer]'),
+        (evidence, 'bind observed turns to intended inputs', 'assert set(matched_turns) == set(turns),', 'assert True,', post+'[observed_turn_substitution]'),
+        (evidence, 'no extra provider dispatch', 'assert len(requests) == 3,', 'assert True,', post+'[extra_provider_human]'),
+        (evidence, 'provider active input is intended dispatch', "assert content[0]['text'] == text,", 'assert True,', post+'[provider_human_replay]'),
+    ])
     for path, name, old, new, test in cases:
         source = (repo / path).read_text()
         assert source.count(old) == 1, name

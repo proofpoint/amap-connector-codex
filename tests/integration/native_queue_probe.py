@@ -19,7 +19,7 @@ import threading
 import uuid
 
 from amap_codex.app_server import AppServerDelivery
-from _native_queue_evidence import assert_queued_original
+from _native_queue_evidence import assert_queued_original, assert_recovery_pending, assert_recovery_completed
 from _unified_evidence import assert_retained_history, history_snapshot
 from _unified_ws import UnixRPC
 from unified_probe import Terminal, until, completed, response_stream
@@ -150,9 +150,14 @@ class Fixture:
         assert b'Queued message ' in out
 
     async def add(self, text, client_id=None):
-        return (await self.client.request('thread/queue/add', {
-            'threadId': self.thread, 'clientUserMessageId': client_id or str(uuid.uuid4()),
+        client_id = client_id or str(uuid.uuid4())
+        queued = (await self.client.request('thread/queue/add', {
+            'threadId': self.thread, 'clientUserMessageId': client_id,
             'input': [{'type': 'text', 'text': text}]}))['queuedSubmission']
+        assert queued['clientUserMessageId'] == client_id
+        assert len(queued['input']) == 1 and queued['input'][0]['type'] == 'text'
+        assert queued['input'][0]['text'] == text
+        return queued
 
     async def pending(self):
         result = await self.client.request('thread/queue/list', {'threadId': self.thread})
@@ -237,8 +242,8 @@ async def recovery(root, build):
         await fixture.start()
         fixture.attach('SYNTHETIC_HUMAN_INPUT')
         await until(fixture.arrived.is_set, fixture.terminal)
-        await fixture.add('SYNTHETIC_RETAIN_POINTER_ONE')
-        await fixture.add('SYNTHETIC_RETAIN_POINTER_TWO')
+        retained = [await fixture.add('SYNTHETIC_RETAIN_POINTER_ONE'),
+                    await fixture.add('SYNTHETIC_RETAIN_POINTER_TWO')]
         cancelled = await fixture.add('SYNTHETIC_CANCEL_POINTER')
         deletion = await fixture.client.request('thread/queue/delete', {
             'threadId': fixture.thread, 'queuedSubmissionId': cancelled['id']})
@@ -246,6 +251,8 @@ async def recovery(root, build):
         pending = await fixture.pending()
         assert cancelled['id'] not in [q['id'] for q in pending]
         before = json.loads(json.dumps(pending))
+        human_text = 'SYNTHETIC_HUMAN_INPUT'
+        human = assert_recovery_pending(await fixture.history(), fixture.thread, retained, before, human_text)
         await fixture.stop_backend(crash=True)
         fixture.release.set()
         await fixture.start()
@@ -254,16 +261,14 @@ async def recovery(root, build):
         # cannot distinguish execution from loss; wait for original turn inputs.
         turns = [await completed(fixture.client), await completed(fixture.client)]
         history = await fixture.history()
-        for expected in before:
-            matches = [(turn['id'], item) for turn in history['thread']['turns'] for item in turn['items']
-                       if item['type'] == 'userMessage' and item.get('clientId') == expected['clientUserMessageId']]
-            assert len(matches) == 1 and matches[0][0] in turns
-            assert_queued_original(history, fixture.thread, expected, matches[0][0])
+        assert_recovery_completed(history, fixture.thread, retained, human, turns, fixture.requests, human_text)
         assert await fixture.pending() == [] and len(fixture.requests) == 3
         assert 'SYNTHETIC_CANCEL_POINTER' not in json.dumps(history)
         result = {'cancel_removes_pending': True, 'pending_before_crash': len(before),
                   'pending_immediately_after_resume': len(after),
                   'queued_inputs_execute_once_after_crash': True, 'history_client_id_and_content_match': True,
+                  'retained_add_receipts_bound_before_crash': True, 'distinct_completed_turn_per_retained_input': True,
+                  'provider_active_inputs_match_intended_dispatches': True,
                   'interrupted_human_not_replayed': True, 'provider_requests_after_resume': len(fixture.requests)}
         return result
     finally:
