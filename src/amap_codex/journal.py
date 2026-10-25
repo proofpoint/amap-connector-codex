@@ -18,8 +18,15 @@ def utc_now():
 # What the journal records for a configuration that names no model.
 DEFAULT_MODEL = "(codex default)"
 
+def require_maintenance_finished(db):
+    for table in ('unified_adoptions', 'native_queue_deletions'):
+        if (db.execute('SELECT 1 FROM sqlite_master WHERE name=?', (table,)).fetchone()
+                and db.execute(f"SELECT 1 FROM {table} WHERE state='planned' LIMIT 1").fetchone()):
+            raise StateConflict('unfinished unified maintenance requires explicit operator reconciliation')
+
 class Journal:
-    def __init__(self, path, instance_id, fingerprint, codex_version, codex_model, *, clock=time.time):
+    def __init__(self, path, instance_id, fingerprint, codex_version, codex_model, *, clock=time.time,
+                 maintenance=False):
         path = Path(path)
         if path.is_dir():
             path = path / "journal.sqlite3"
@@ -63,6 +70,8 @@ class Journal:
         ''')
         try:
             with self._transaction():
+                if not maintenance:
+                    require_maintenance_finished(self.db)
                 row = self.db.execute("SELECT * FROM instance").fetchone()
                 if row is None:
                     self.db.execute("INSERT INTO instance(instance_id,fingerprint,codex_version,codex_model) VALUES(?,?,?,?)",
@@ -385,6 +394,7 @@ def migrate(path, instance_id, fingerprint, note, *, clock=time.time):
     try:
         db.execute("BEGIN IMMEDIATE")
         try:
+            require_maintenance_finished(db)
             row = db.execute("SELECT * FROM instance").fetchone()
             if row is None or row["instance_id"] != instance_id:
                 raise IntegrityConflict("journal belongs to a different instance")

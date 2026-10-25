@@ -1,0 +1,25 @@
+{
+  "timestamp_utc": "2026-10-25T15:31:38.752501+00:00",
+  "codex_version": "codex-cli 0.164.0",
+  "os": "Linux",
+  "architecture": "aarch64",
+  "external_inference": false,
+  "user_auth_used": false,
+  "fleet_submissions": 0,
+  "adoption": {
+    "operator_selected_history_retained_exactly": true,
+    "other_saved_history_retained": true,
+    "adoption_submits_no_model_input": true,
+    "protected_policy_and_tools_refreshed": true,
+    "next_peer_turn_visible_in_adopted_pane": true
+  },
+  "cancellation": {
+    "changed_pending_body_blocks_resume": true,
+    "audited_offline_cancellation": true,
+    "cancelled_input_absent_after_resume": true,
+    "no_pending_or_human_replay": true,
+    "no_fabricated_delivered_outcome": true
+  },
+  "probe_assertions_passed": true,
+  "fleet_ready": false
+}
