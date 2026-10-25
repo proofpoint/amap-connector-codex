@@ -18,6 +18,7 @@ import re
 import signal
 import struct
 import subprocess
+import sys
 import tempfile
 import termios
 import threading
@@ -56,7 +57,14 @@ class Terminal:
     def __init__(self, argv, env, cwd):
         self.master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 140, 0, 0))
-        self.process = subprocess.Popen(argv, stdin=slave, stdout=slave, stderr=slave,
+        # A PTY fd alone does not establish a controlling terminal after setsid.
+        # Native keyboard events use /dev/tty; claim it before exec, without a
+        # preexec_fn in this multithreaded synthetic-provider process.
+        attach_tty = ('import fcntl,os,sys,termios; '
+                      'fcntl.ioctl(0,termios.TIOCSCTTY,0); '
+                      'os.execvpe(sys.argv[1],sys.argv[1:],os.environ)')
+        self.process = subprocess.Popen([sys.executable, '-c', attach_tty, *argv],
+                                        stdin=slave, stdout=slave, stderr=slave,
                                         cwd=cwd, env=env, start_new_session=True)
         os.close(slave)
         os.set_blocking(self.master, False)

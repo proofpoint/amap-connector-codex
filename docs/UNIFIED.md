@@ -1,8 +1,10 @@
 # Unified conversation
 
-Status: engineering in progress. The isolated native-TUI feasibility probe
-passes on Codex 0.164.0. No production command, deployment activation or
-automatic migration is provided by this change.
+Status: engineering in progress. Native-TUI visibility and basic native queue
+behavior and the named queue recovery/approval scenarios are measured on Codex
+0.164.0. Owned attachment and durable AMAP queue integration are the next
+implementation gate. No production command, deployment activation or automatic
+migration is provided by this change.
 
 ## Decision
 
@@ -15,6 +17,65 @@ claims or cancel incoming work.
 Keep the existing headless/separate mode supported. Unified mode will be an
 explicit configuration choice, with its own startup and migration checks. It
 must remain independent of any deployment adapter or terminal multiplexer.
+
+Use Codex's native queued-input mechanism as the primary delivery path. The
+connector admits durable AMAP notices, queues a protected lookup pointer into
+the registered conversation, and reconciles that pointer with execution and
+outbound results. Codex owns native turn scheduling and terminal interaction.
+Add custom arbitration only where a measured gap requires it; do not build a
+second scheduler or intercept every terminal RPC merely to reproduce native
+queuing. The reliability gates below must pass before activating this mode.
+
+### Native queue evidence and remaining gates
+
+The native `codex queue --remote <endpoint> --thread <exact-id> --message
+<pointer>` command targets the same explicitly owned backend as the terminal.
+It is not terminal keystroke injection. Isolated tests with a credential-free
+home and synthetic localhost provider have measured:
+
+- Incoming queued work waits for an active human turn to complete.
+- Queuing while idle starts a turn whose response appears in the same TUI.
+- With the managed backend alive, work executes after terminal detachment and
+  reattachment displays its response. The complete ordered earlier history is
+  retained without starting another turn.
+- The synthetic model, read-only sandbox and never-approve policy are retained.
+  A separate read-only/on-request scenario measures approval behavior below;
+  broader permission profiles require their own tests.
+- Queue text becomes a native `userMessage`, not a tool-output item. Only a
+  connector-authored, content-free pointer may use this path; sender text is
+  fetched through the authenticated reader under the standing operator policy.
+
+[The native queue probe](../tests/integration/native_queue_probe.py) also measures
+distinct pending inputs executing once across a killed backend, lost-ACK
+reconciliation without resubmission, pending deletion, active cancellation,
+native queue edits/reordering, and native approval holds/reattachment/decline.
+Its [build-specific receipt](../compatibility/native-queue-0.164.0.json) records
+the exact scope. These are isolated scenarios, not an exactly-once guarantee.
+
+Repeating `thread/queue/add` with the same `clientUserMessageId` creates distinct
+pending submissions and both can execute. That field is correlation, not an
+idempotency key. Native queue edits preserve it too. Original history exposes
+it as `userMessage.clientId`; check exact input content, canonical thread,
+observed turn, uniqueness and status as well as the ID. An assistant echo,
+matching ID with edited input, or duplicate input is insufficient evidence.
+
+Resume can begin executing pending work before an initial queue read completes.
+A decreased pending count alone establishes neither loss nor execution. Native
+history and pending queue observations can expose an intermediate state; wait
+or hold when the original input is not yet inspectable. Never resubmit on that
+basis. The isolated restart test does not replay the interrupted human input.
+
+A native queue receipt proves queue admission, not execution acceptance,
+completed work or a delivered reply. Production journal integration, exhaustive
+pagination, uncertain crash windows, permissions changes, stale/foreign client
+rejection and an actual reader/submit round trip remain implementation gates.
+
+The general collaboration pattern is durable work plus a small native wake.
+Reuse AMAP's existing runtime-owned notice files, authenticated readers,
+consumer claims and delivery journal. Another pair of mailbox directories,
+another message schema or a Claude-specific hook is not required. Explicit
+thread registration is portable; Linux `/proc` discovery is not the canonical
+binding authority. A brokerless file mailbox does not mean Codex has no backend.
 
 ## Foundations
 
@@ -45,10 +106,13 @@ production transport implementation. The installed stdio proxy command did not
 complete initialization against that listener in the initial probe; no design
 depends on assuming the two transports are interchangeable.
 
-Before production exposure, a connector-owned access layer must mediate every
-state-changing terminal request. A direct shared-server attachment proves
-rendering feasibility but does not provide input arbitration or approval
-ownership. Read-only observation and direct backend mutation are not equivalent.
+The native backend is the scheduling authority. The connector must verify its
+queue, lifecycle and approval contracts before exposing unified mode. A custom
+access layer is required only for concrete invariants native behavior cannot
+enforce, such as a verified canonical binding or a terminal lease. Direct
+shared-server attachment by itself proves neither recovery nor approval
+ownership. Do not revive the existing headless auto-cancelling responder on a
+shared conversation.
 
 The backend and controller survive terminal detachment. A failed attach is not
 permission to launch a second backend or resume the canonical history in a
@@ -56,27 +120,42 @@ private process. Losing the backend requires reconciliation before dispatch.
 
 ## Human, mail and peer inputs
 
-All inputs enter one controller scheduler. Default ordering is FIFO with one
-active turn. Incoming work waits while a human turn is active; the connector
-does not automatically steer or interrupt it. Explicit operator steering or
-stopping needs an audited control path and its own supported protocol contract.
+Human input remains native. AMAP pointers enter the native per-thread queue;
+incoming work waits while a human turn is active and the connector does not
+automatically steer or interrupt it. Measure ordering against human queued
+input, steering and cancellation before claiming global FIFO. Preserve native
+operator controls where their reconciliation behavior has been verified.
 
 Mail and peer admission retains the existing validated notice-pointer format,
 source identity, message/reply correlation, reader framing and delivery journal.
 Incoming body text must not be inserted as if the operator typed it. Sources
 cannot supply model, permission, configuration or thread-selection overrides.
 
-Human input also needs a durable intent record before transport submission.
-The record must identify its source and canonical generation, retain a request
-hash, and correlate accepted/uncertain submission with original history.
-Codex 0.164.0 exposes `clientUserMessageId`; its history/reconnect behavior must
-be measured before using it as reconciliation evidence. Do not treat a timed-out
-terminal RPC as proof that a human turn was never submitted.
+Journal AMAP intent before submission. Retain canonical binding/generation,
+stable event identity, the exact pointer/hash, queue association when known,
+and accepted/uncertain state. A queue timeout or a missing pending entry does
+not authorize resubmission: inspect original input history too, and hold work
+when evidence is insufficient. Treat human dispatches as recorded work for
+thread recovery even when the AMAP ledger is empty. Prefer measured native
+durable history over duplicating human input into another scheduler/journal.
 
-The controller must coordinate native `turn/start`, queued inputs, steering,
-interrupts and other turn-producing methods. A queue class in isolation is not
-proof that native clients cannot bypass it. Unknown mutations are refused until
-their ownership, recovery and permission behavior has been implemented.
+The native CLI is the operator-facing proof of this mechanism. For controller
+integration, prefer the corresponding `thread/queue/add` API so the journal can
+record `clientUserMessageId` before sending and retain the returned submission
+association. Do not parse human-readable CLI success text as the recovery
+contract. Even a stable caller-provided ID does not make a repeated add safe.
+
+Keep scanning admitted runtime notices at service startup and during operation;
+the model does not become the notice watcher. Recover pending journal rows at
+startup, rescan retained notices, and reconcile queue/history before any new
+submission. A wake is a hint pointing at durable work. Frozen review records and
+reply correlation can remain application conventions; a claim or reply is not
+automatically a completed review, and neither replaces AMAP delivery outcomes.
+
+Native queued items may be edited, deleted or reordered by an operator. A
+missing or changed connector pointer must be reconciled explicitly; never
+silently recreate cancelled work or apply a verdict to changed bytes. Requests,
+claims, completed execution and outbound acknowledgements remain distinct.
 
 ## Policy and approvals
 
@@ -91,14 +170,17 @@ Resolve the initial model and permission settings before starting the managed
 thread. An explicit native model selection must agree with the service's
 resolved model, or startup refuses and names the mismatch. Never let the pane
 display one model while incoming work silently uses another configuration
-source. Subsequent supported operator changes go through the controller and
-are recorded with their effective settings. Protected AMAP tools and developer
-policy remain required, while approved native tools are retained.
+source. Subsequent supported native operator changes must be observable to the
+connector and recorded with their effective settings. Protected AMAP tools and
+developer policy remain required, while approved native tools are retained.
 
 All approval/user-input requests have one authoritative routing decision. The
-current headless responder must not race a terminal response. With an eligible
-attached terminal, route the request to the operator; without one, hold the
-work without granting permission or replaying the accepted turn. Approval
+current headless responder must not race a terminal response. The native queue
+probe uses a passive controller observer, measures an offline approval hold,
+and verifies native prompt recovery and decline without executing the command.
+It does not implement generation/lease authorization for production clients.
+With an eligible attached terminal, route the request to the operator; without
+one, hold the work without granting permission or replaying the accepted turn. Approval
 replies from the wrong session or backend generation are refused.
 
 The first production mode permits one writable terminal client per instance.
@@ -178,16 +260,22 @@ implementation; this document does not claim these fields already exist.
    their responses in that terminal. Detach and reattach without a new turn or
    duplicate history. Use a deterministic local provider, no personal auth,
    external inference or fleet traffic. Record exact build and proof limits.
-2. **Connection and request ownership.** Implement the private endpoint and
-   terminal access layer, exact instance/thread/generation binding, lifecycle
-   cleanup and bounded event forwarding. Verify stale, foreign and extra-client
-   cases, backpressure and preserved per-thread settings. Test every guard on
-   scratch copies. No feature activation yet.
-3. **Durable unified scheduling.** Journal human intents and AMAP admission
-   before writes, serialize native and incoming requests, reconcile by original
-   input/turn identity, and hold ambiguous work. Verify real native busy-input,
-   queue, cancellation and disconnect semantics rather than inventing response
-   shapes the native UI cannot consume.
+2. **Native queue reliability — probe implemented.** Measure native busy/idle
+   delivery, exact history retention, queue persistence across crashes, lost
+   acknowledgements, duplicate submission/execution, cancellation, native queue
+   controls and approvals. Steering, fork/reset, model/permission changes and
+   every other unmeasured native control remain explicit integration gates.
+   Use synthetic local inference and scratch-copy guard
+   mutations. Record unsupported properties as gaps rather than replacing native
+   behavior with an invented scheduler or claiming a production pass.
+3. **Owned attachment and queue integration.** Implement the private endpoint,
+   exact instance/thread/generation binding, terminal lease, bounded lifecycle
+   handling and required observation. Reuse verified native queue behavior;
+   journal AMAP intent before writes, associate queue and original turn inputs,
+   distinguish queue admission from execution, and hold ambiguous work. Preserve
+   native human interaction. Add only reconciliation and binding machinery that
+   native behavior does not already supply. Verify stale, foreign and extra-client
+   cases, backpressure and preserved settings. No feature activation yet.
 4. **Approvals and adoption.** Add sole-owner approval routing, offline holds,
    policy refresh and explicit history adoption. Verify no terminal/headless
    response race, no permission expansion, no replay and retained history.
@@ -211,7 +299,8 @@ The fixture uses an actual native TUI and app-server over a private socket, but
 a deterministic localhost server supplies synthetic Responses API events.
 The human request is briefly held so active state can be observed. Controller
 pointer turns are submitted only after completion, and both responses appear
-in the same terminal. Reattachment renders the same three-turn history.
+in the same terminal. Reattachment preserves the exact backend history and
+renders the final response.
 Each original machine-input item must contain the complete expected pointer in
 its accepted turn, exactly once. The probe snapshots the full ordered turn and
 item data before detachment and requires exact equality after reattachment.
@@ -225,4 +314,27 @@ approval routing, existing-thread adoption, an actual reader/submit round trip,
 host isolation, crash recovery or a safe deployment. Those remain named gates.
 
 Protocol references: [app-server transport and events](https://learn.chatgpt.com/docs/app-server)
-and [native CLI connection options](https://learn.chatgpt.com/docs/developer-commands).
+and [native queue and CLI connection options](https://learn.chatgpt.com/docs/cli/reference).
+
+## Reproduce native queue reliability
+
+With the installed Codex build and development interpreter:
+
+```sh
+PYTHONPATH=src python tests/integration/native_queue_probe.py --output /tmp/native-queue-probe.json
+python -m pytest tests/test_native_queue_probe.py tests/test_unified_probe.py
+python tests/mutations/native_queue_probe.py
+```
+
+The probe creates a private disposable home/backend and synthetic local
+provider. It exercises the actual native queue CLI, queue APIs and terminal,
+including an actual keyboard decline in the disposable approval prompt.
+It uses no user credentials, external inference or fleet messages. Its
+test-only WebSocket client remains unsuitable as a production transport.
+Offline controls and scratch-copy mutations reject foreign threads, wrong
+client/turn IDs, edited input, duplicate originals, assistant echoes, wrong
+execution status and an observer that answers an approval request.
+
+This completes the named synthetic protocol investigation. Implementing the
+owned backend/attachment, durable AMAP submission/reconciliation and deployment
+contract remains step 3 onward; the commands above do not install unified mode.

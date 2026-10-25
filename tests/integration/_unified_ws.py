@@ -14,7 +14,7 @@ from amap_codex.app_server import RPCError, Uncertain, version_matches
 
 
 class UnixRPC:
-    def __init__(self, path, expected_version):
+    def __init__(self, path, expected_version, *, request_handler=None):
         self.path, self.expected_version = path, expected_version
         self.turn_starts = 0
         self.initialize_result = {}
@@ -25,6 +25,7 @@ class UnixRPC:
         self.writer = None
         self.task = None
         self.blocked = 0
+        self.request_handler = request_handler
 
     def reserve_id(self):
         self.sequence += 1
@@ -107,8 +108,11 @@ class UnixRPC:
                 if 'method' in message:
                     if 'id' in message:
                         self.blocked += 1
-                        await self.send({'id': message['id'], 'error': {
-                            'code': -32000, 'message': 'synthetic probe authorizes no interaction'}})
+                        if self.request_handler is not None:
+                            await self.request_handler(message)
+                        else:
+                            await self.send({'id': message['id'], 'error': {
+                                'code': -32000, 'message': 'synthetic probe authorizes no interaction'}})
                     elif message['method'] in {'turn/started', 'turn/completed', 'thread/status/changed'}:
                         self.notifications.put_nowait(message)
                 elif 'id' in message:

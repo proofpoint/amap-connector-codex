@@ -119,6 +119,23 @@ class Writer:
         pass
 
 
+def test_probe_passive_observer_does_not_answer_server_approval():
+    async def check():
+        observed = []
+        async def record(frame):
+            observed.append(frame)
+        client = probe_ws.UnixRPC(Path('/unused'), 'codex-cli 0.164.0', request_handler=record)
+        client.reader, client.writer = asyncio.StreamReader(), Writer()
+        request = {'id': 99, 'method': 'item/commandExecution/requestApproval',
+                   'params': {'threadId': 'canonical', 'turnId': 'turn1'}}
+        client.reader.feed_data(server_frame(json.dumps(request).encode()))
+        client.reader.feed_eof()
+        await client.read()
+        assert observed == [request]
+        assert client.writer.data == b'', 'passive observer must not cancel or grant approval'
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize('bad', ['fragmented', 'masked', 'reserved', 'binary', 'oversized'])
 def test_probe_transport_refuses_unsupported_frames_before_delivering_rpc_result(bad):
     async def check():
