@@ -38,8 +38,8 @@ def main():
         ('native_queue.py', 'original client', "and item.get('clientId') == intent['client_id']", ''),
         ('native_queue.py', 'original full input', "item.get('content') != expected or ", ''),
         ('native_queue.py', 'original status', "or turn.get('status') not in TERMINAL | {'inProgress'}):\n            raise IntegrityConflict('original native input or execution status differs from durable intent')", "):\n            raise IntegrityConflict('original native input or execution status differs from durable intent')"),
-        ('native_queue.py', 'pending full input', "item.get('input') != expected or ", ''),
-        ('native_queue.py', 'pending association', "or (intent['queue_id'] is not None and intent['queue_id'] != item['id'])", ''),
+        ('native_queue.py', 'pending full input', "if item.get('input') != expected:", 'if False:'),
+        ('native_queue.py', 'pending association', "or (known and item.get('id') not in known)", ''),
         ('native_queue.py', 'cursor shape/cycle', 'if not isinstance(cursor, str) or not cursor or cursor in seen:', 'if False:'),
         ('native_queue.py', 'resume queue duplicates', 'or identifier in seen or identifier in originals', ''),
         ('native_queue.py', 'retained queued artifacts', 'or not retained(event)', ''),
@@ -71,6 +71,10 @@ def main():
         ('unified_readiness.py', 'published heartbeat bound', "or value.get('heartbeat_max_age_seconds') != max(10, config.poll_interval_ms / 1000 * 3)", ''),
         ('unified_readiness.py', 'closed scheduler vocabulary', "or value.get('scheduler_state') not in ('idle', 'active')", ''),
         ('cli.py', 'public observations validate ready evidence', 'validate_ready(config, recorded, status)', 'None'),
+        ('native_queue.py', 'pre-resume known queue custody', 'WHERE client_id=? OR queue_id=?', 'WHERE client_id=? AND ? IS NOT NULL'),
+        ('native_queue.py', 'queue client association', "item.get('clientUserMessageId') != intent['client_id']", 'False'),
+        ('native_queue.py', 'native queue ID uniqueness', 'if not isinstance(queue_id, str) or not queue_id or queue_id in queue_ids:', 'if False:'),
+        ('native_queue.py', 'one native queue cannot bind multiple attempts', 'if len(matches) != 1:', 'if False:'),
     ]
     tests = ['tests/test_local_socket.py', 'tests/test_local_rpc.py', 'tests/test_native_queue.py',
              'tests/test_attach_gate.py', 'tests/test_managed_backend.py', 'tests/test_unified_attach.py', 'tests/test_unified_status.py']

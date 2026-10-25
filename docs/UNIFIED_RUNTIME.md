@@ -93,6 +93,9 @@ loading it. Refuse duplicated IDs, inputs already present in original history,
 recorded accepted/finished work still pending, changed pointer associations,
 blocked intents or unavailable/changed retained artifacts. This check precedes
 Codex's automatic draining of persisted queued work on resume.
+Either a known queue ID or a known client ID retains AMAP custody. A changed
+association is refused before the unrelated-human-input exception, including
+when the retained event was completed or its body is no longer available.
 
 Reconciliation pages both turns and full items, as well as the pending queue.
 It checks canonical identity, unique original `userMessage.clientId`, complete
@@ -198,6 +201,6 @@ distinct gates.
 python tests/mutations/unified_runtime.py
 ```
 
-This inventory disables 61 critical transport, ownership, queue, policy and
+This inventory disables 65 critical transport, ownership, queue, policy and
 attachment guards on independent scratch copies and requires the negative
 controls to detect each mutation. It never mutates repository source files.
