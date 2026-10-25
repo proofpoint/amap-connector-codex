@@ -187,6 +187,73 @@ def test_persisted_pending_is_checked_before_any_resume(tmp_path, bad):
     asyncio.run(check())
 
 
+@pytest.mark.parametrize('change', ['client', 'client_edited_input', 'client_unretained', 'client_finished'])
+def test_known_queue_identity_never_loses_amap_custody(tmp_path, change):
+    async def check():
+        with journal_for(tmp_path) as j:
+            backend = Backend()
+            await NativeQueue(j, backend, 'generation1').dispatch('event1')
+            backend.pending[0]['clientUserMessageId'] = 'different-client'
+            if change == 'client_edited_input': backend.pending[0]['input'][0]['text'] += ' edited'
+            if change == 'client_finished': j.handled('event1', 'explicit prior disposition')
+            with pytest.raises(IntegrityConflict):
+                await preflight_pending(backend, j, lambda e: change != 'client_unretained')
+            assert backend.adds == 1
+    asyncio.run(check())
+
+
+def test_unrelated_native_human_queue_retains_native_ownership(tmp_path):
+    async def check():
+        with journal_for(tmp_path) as j:
+            backend = Backend()
+            await NativeQueue(j, backend, 'generation1').dispatch('event1')
+            backend.pending = [{'id': 'human-queue', 'clientUserMessageId': 'human-client',
+                                'input': [{'type': 'text', 'text': 'human input'}]}]
+            await preflight_pending(backend, j, lambda e: False)
+            assert backend.adds == 1
+    asyncio.run(check())
+
+
+def test_online_reconciliation_holds_changed_client_on_known_queue_id(tmp_path):
+    async def check():
+        with journal_for(tmp_path) as j:
+            backend = Backend()
+            queue = NativeQueue(j, backend, 'generation1')
+            await queue.dispatch('event1')
+            backend.pending[0]['clientUserMessageId'] = 'different-client'
+            assert not (await queue.reconcile())[0]
+            assert queue.ledger.latest('event1')['blocked'] == 1
+            assert j.event('event1')['state'] == 'uncertain'
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize('bad', ['missing', 'duplicate'])
+def test_human_queue_ids_must_also_be_explicit_and_unique(tmp_path, bad):
+    async def check():
+        with journal_for(tmp_path) as j:
+            backend = Backend()
+            backend.pending = [{'id': 'human-queue', 'clientUserMessageId': 'human-client', 'input': []}]
+            if bad == 'missing': backend.pending[0].pop('id')
+            else: backend.pending.append({**backend.pending[0], 'clientUserMessageId': 'another-client'})
+            with pytest.raises(IntegrityConflict): await preflight_pending(backend, j, lambda e: True)
+    asyncio.run(check())
+
+
+def test_one_native_id_cannot_refer_to_two_durable_events(tmp_path):
+    async def check():
+        with journal_for(tmp_path) as j:
+            backend = Backend()
+            await NativeQueue(j, backend, 'generation1').dispatch('event1')
+            j.admit(SimpleNamespace(state='pending', lane='peer', notice_id='notice2', artifact_hash='hash2',
+                event_id='event2', payload={'event_id': 'event2', 'lane': 'peer', 'notice_id': 'notice2'}, detail=''))
+            j.db.execute("INSERT INTO attempts(event_id,number,rpc_id,started_at,state) VALUES('event2',1,'old',0,'finished')")
+            j.db.execute("INSERT INTO native_queue_intents(event_id,number,thread_id,generation,client_id,input_json,queue_id) "
+                         "VALUES('event2',1,'canonical','old','old-client','[]','queued1')")
+            j._set('event2', 'finished', 'earlier synthetic event')
+            with pytest.raises(IntegrityConflict): await preflight_pending(backend, j, lambda e: True)
+    asyncio.run(check())
+
+
 @pytest.mark.parametrize('bad', ['duplicate', 'already_original'])
 def test_native_human_pending_is_not_automatically_replayed_when_duplicated(tmp_path, bad):
     async def check():

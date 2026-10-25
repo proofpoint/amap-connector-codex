@@ -138,18 +138,26 @@ async def preflight_pending(client, journal, retained):
         return
     ledger = QueueLedger(journal)
     history, pending = await snapshot(client, journal.thread_id)
-    seen = set()
+    seen, queue_ids = set(), set()
     originals = {item.get('clientId') for turn in history['thread']['turns'] for item in turn['items']
                  if item.get('type') == 'userMessage' and item.get('clientId')}
     for item in pending:
         identifier = item.get('clientUserMessageId') if isinstance(item, dict) else None
+        queue_id = item.get('id') if isinstance(item, dict) else None
         if not isinstance(identifier, str) or not identifier or identifier in seen or identifier in originals:
             raise IntegrityConflict('persisted native queue is duplicated or already represented in original history')
+        if not isinstance(queue_id, str) or not queue_id or queue_id in queue_ids:
+            raise IntegrityConflict('persisted native queue identity is missing or duplicated')
         seen.add(identifier)
-        row = journal.db.execute('SELECT * FROM native_queue_intents WHERE client_id=?', (identifier,)).fetchone()
-        if row is None:
+        queue_ids.add(queue_id)
+        matches = journal.db.execute('SELECT * FROM native_queue_intents WHERE client_id=? OR queue_id=?',
+                                     (identifier, queue_id)).fetchall()
+        if not matches:
             continue  # Native human input retains native ownership and scheduling.
-        intent = dict(row)
+        if len(matches) != 1:
+            raise IntegrityConflict('persisted queue identity matches conflicting durable attempts')
+        intent = dict(matches[0])
+        associated_pending(intent, [item])  # Either identity retains AMAP custody.
         event = journal.event(intent['event_id'])
         attempt = journal.db.execute('SELECT state FROM attempts WHERE event_id=? AND number=?',
                                      (intent['event_id'], intent['number'])).fetchone()
@@ -160,19 +168,35 @@ async def preflight_pending(client, journal, retained):
             raise IntegrityConflict('persisted AMAP pointer requires explicit queue disposition before resume')
 
 
+def associated_pending(intent, pending, *, queue_id=None):
+    """A known queue ID cannot become human input by changing its client ID."""
+    known = {v for v in (intent['queue_id'], queue_id) if v is not None}
+    if len(known) > 1:
+        raise IntegrityConflict('recorded queue and deletion identities disagree')
+    if any(not isinstance(q, dict) or not isinstance(q.get('id'), str) or not q['id']
+           or not isinstance(q.get('clientUserMessageId'), str) or not q['clientUserMessageId'] for q in pending):
+        raise IntegrityConflict('native pending identity is missing or malformed')
+    queued = [q for q in pending if isinstance(q, dict) and (
+        q.get('clientUserMessageId') == intent['client_id'] or q.get('id') in known)]
+    for item in queued:
+        if (item.get('clientUserMessageId') != intent['client_id']
+                or (known and item.get('id') not in known)):
+            raise IntegrityConflict('known native queue identity changed its durable client association')
+    return queued
+
+
 def observe_intent(intent, history, pending):
     if history.get('thread', {}).get('id') != intent['thread_id']:
         raise IntegrityConflict('history belongs to another canonical thread')
     expected = json.loads(intent['input_json'])
-    queued = [q for q in pending if isinstance(q, dict) and q.get('clientUserMessageId') == intent['client_id']]
+    queued = associated_pending(intent, pending)
     original = [(turn, item) for turn in history['thread']['turns'] for item in turn.get('items', [])
                 if item.get('type') == 'userMessage' and item.get('clientId') == intent['client_id']]
     if len(queued) + len(original) > 1:
         raise IntegrityConflict('multiple native submissions use one durable client identity')
     if queued:
         item = queued[0]
-        if (item.get('input') != expected or not isinstance(item.get('id'), str) or not item['id']
-                or (intent['queue_id'] is not None and intent['queue_id'] != item['id'])):
+        if item.get('input') != expected:
             raise IntegrityConflict('queued pointer content or association changed')
         return 'queued', item['id'], None
     if original:

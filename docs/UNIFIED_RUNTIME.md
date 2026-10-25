@@ -24,6 +24,9 @@ options, before `app-server`. It is an argument vector, never shell text. The
 existing `launch_argv` remains in configuration for the separate-mode contract;
 unified mode launches its own managed Unix backend using `unified_argv`.
 `codex_model`, `sandbox` and `approval_policy` resolve the shared pane settings.
+Native workspace evidence must be a nonempty absolute path matching the configured
+workspace. Missing, empty or relative native paths never fall back to the local
+service process directory.
 An explicit native model or permission flag must match them. An audited model
 change on service restart keeps the canonical thread; protected policy changes
 continue to require an explicit transition.
@@ -94,6 +97,9 @@ loading it. Refuse duplicated IDs, inputs already present in original history,
 recorded accepted/finished work still pending, changed pointer associations,
 blocked intents or unavailable/changed retained artifacts. This check precedes
 Codex's automatic draining of persisted queued work on resume.
+Either a known queue ID or a known client ID retains AMAP custody. A changed
+association is refused before the unrelated-human-input exception, including
+when the retained event was completed or its body is no longer available.
 
 Reconciliation pages both turns and full items, as well as the pending queue.
 It checks canonical identity, unique original `userMessage.clientId`, complete
@@ -127,6 +133,9 @@ Both separate and unified `status` declare `schema_version = 1` and `mode`;
 [the JSON Schema](status.schema.json) describes the additive public format,
 including a not-started or held instance. Schema validation alone does not
 establish freshness or matching generation/binding.
+Public status, activity and attachment share the same ready-evidence validator.
+Stale or incomplete public snapshots report unknown readiness; a copied ready
+label alone is never accepted.
 
 Unified `status` exposes facts sourced from the matching journal and
 service snapshot. `unified.json` is the private attachment descriptor:
@@ -196,6 +205,6 @@ distinct gates.
 python tests/mutations/unified_runtime.py
 ```
 
-This inventory disables 60 critical transport, ownership, queue, policy and
+This inventory disables 69 critical transport, ownership, queue, policy and
 attachment guards on independent scratch copies and requires the negative
 controls to detect each mutation. It never mutates repository source files.

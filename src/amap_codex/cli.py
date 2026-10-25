@@ -22,6 +22,8 @@ def read_status(config):
     base = {"instance_id": config.instance_id, "enabled_lanes": [l.name for l in config.lanes],
             'schema_version': 1, 'mode': config.conversation_mode,
             'heartbeat_max_age_seconds': max(10, config.poll_interval_ms / 1000 * 3)}
+    if config.conversation_mode == 'unified':
+        base['readiness'] = {'state': 'unknown', 'checks': {}}
     if not path.exists():
         return {**base, "state": "not_started", "thread_id": None, "pending_count": 0, "uncertain_count": 0}
     if path.is_symlink():
@@ -71,18 +73,18 @@ def read_status(config):
                 if key in recorded:
                     status[key] = recorded[key]
             if config.conversation_mode == 'unified':
-                if (recorded.get('instance_id') == config.instance_id and recorded.get('fingerprint') == instance['fingerprint']
-                        and instance['fingerprint'] == config.fingerprint()
-                        and recorded.get('codex_version') == config.codex_version
-                        and (config.codex_model is None or recorded.get('effective_settings', {}).get('model') == config.codex_model)
-                        and recorded.get('canonical_thread_id') == instance['thread_id'] and recorded.get('mode') == 'unified'):
+                from .unified_readiness import validate_ready
+                try:
+                    validate_ready(config, recorded, status)
+                except ValueError as exc:
+                    status['readiness'] = {'state': 'unknown', 'checks': {}}
+                    status['readiness_detail'] = str(exc)
+                else:
                     for key in ('schema_version', 'mode', 'backend_generation', 'canonical_thread_id', 'endpoint',
                                 'backend_pid', 'attached_client_count', 'scheduler_state', 'active_input_source',
                                 'queue_depth', 'queue_sources', 'effective_settings', 'readiness',
                                 'protected_tools_validation', 'heartbeat_max_age_seconds'):
                         if key in recorded: status[key] = recorded[key]
-                else:
-                    status['readiness'] = {'state': 'unknown', 'checks': {}}
         except (OSError, ValueError):
             pass
     return status

@@ -127,6 +127,12 @@ def read_activity(config, *, limit=20, outbox=None):
     result['heartbeat'] = ('unknown' if not isinstance(stamp, (int, float)) else
                            'fresh' if 0 <= time.time()-stamp <= max(10, config.poll_interval_ms/1000*3)
                            else 'stale')
+    if config.conversation_mode == 'unified':
+        from .unified_readiness import validate_ready
+        try:
+            validate_ready(config, status, status)
+        except ValueError:
+            status['readiness'] = {'state': 'unknown', 'checks': {}}
     result['readiness'] = (status.get('readiness', {'state': 'unknown', 'checks': {}})
                            if config.conversation_mode == 'unified' else
                            supervisor_readiness(config, status, result['heartbeat']))

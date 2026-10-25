@@ -14,7 +14,7 @@ from .native_queue import NativeQueue, preflight_pending
 from .outcomes import OutcomePublisher, OutcomeUncertain
 from .spool import Scanner
 from .supervisor import Ownership, Supervisor, atomic_json
-from .unified_policy import resolve, validate_tools
+from .unified_policy import resolve, validate_tools, workspace_matches
 
 
 class UnifiedService:
@@ -74,7 +74,7 @@ class UnifiedService:
             if (not isinstance(result.get('model'), str) or result.get('approvalPolicy') != c.approval_policy
                     or (c.codex_model is not None and result['model'] != c.codex_model)
                     or result.get('sandbox', {}).get('type') != sandbox_type
-                    or Path(result.get('cwd', '')).resolve() != Path(c.cwd).resolve()):
+                    or not workspace_matches(result.get('cwd'), c.cwd)):
                 raise ValueError('resolved native model or permissions are unavailable or mismatched')
             with self.journal._transaction():
                 if old and old['effective_model'] != result['model']:
