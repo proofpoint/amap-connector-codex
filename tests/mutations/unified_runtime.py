@@ -27,6 +27,7 @@ def main():
         ('managed_backend.py', 'private directory', 'if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:', 'if False:'),
         ('managed_backend.py', 'private socket', 'if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:', 'if False:'),
         ('managed_backend.py', 'explicit alias authority', 'and allow_owned_alias:', ':'),
+        ('managed_backend.py', 'resolved native target path length', 'if len(os.fsencode(target)) > 100:', 'if False:'),
         ('native_queue.py', 'ack identity/content', "or submission.get('clientUserMessageId') != intent['client_id']\n                or submission.get('input') != json.loads(intent['input_json'])", ''),
         ('native_queue.py', 'queue ID nonempty', "or not 0 < len(submission['id']) <= 200", ''),
         ('native_queue.py', 'ack binding', "if current != intent or j.thread_id != intent['thread_id']:", 'if False:'),
@@ -62,9 +63,16 @@ def main():
         ('unified_attach.py', 'one writer precheck', "if type(value.get('attached_client_count')) is not int or value['attached_client_count'] != 0:", 'if False:'),
         ('unified_attach.py', 'foreign resume', "if resume and resume[0] != '--last' and resume[0].lower() != value['canonical_thread_id'].lower():", 'if False:'),
         ('unified_attach.py', 'native flags match pane', 'if expected is not None and option_value != expected:', 'if False:'),
+        ('unified.py', 'startup tool validation bound to generation', "bool(self.tools_validation and\n                      self.tools_validation['backend_generation'] == self.backend.generation)", 'True'),
+        ('unified.py', 'unknown native state cannot authorize dispatch', "clean and isinstance(state, dict) and state.get('type') in {'idle', 'active'}", 'clean'),
+        ('unified.py', 'unknown native state cannot authorize readiness', 'clean and known_state if history else None', 'clean if history else None'),
+        ('unified_attach.py', 'validation generation', "or validation.get('backend_generation') != generation", ''),
+        ('unified_attach.py', 'validation timestamp', "or not 0 < validation['validated_at'] <= stamp", ''),
+        ('unified_attach.py', 'published heartbeat bound', "or value.get('heartbeat_max_age_seconds') != max(10, config.poll_interval_ms / 1000 * 3)", ''),
+        ('unified_attach.py', 'closed scheduler vocabulary', "or value.get('scheduler_state') not in {'idle', 'active'}", ''),
     ]
     tests = ['tests/test_local_socket.py', 'tests/test_local_rpc.py', 'tests/test_native_queue.py',
-             'tests/test_attach_gate.py', 'tests/test_managed_backend.py', 'tests/test_unified_attach.py']
+             'tests/test_attach_gate.py', 'tests/test_managed_backend.py', 'tests/test_unified_attach.py', 'tests/test_unified_status.py']
     for filename, name, old, new in cases:
         path = Path('src/amap_codex') / filename
         source = (repo / path).read_text()
@@ -73,7 +81,7 @@ def main():
         compile(mutated, str(path), 'exec')
         with tempfile.TemporaryDirectory(prefix='amap-runtime-guard-') as directory:
             root = Path(directory)
-            for tree in ('src', 'tests'):
+            for tree in ('src', 'tests', 'docs'):
                 shutil.copytree(repo / tree, root / tree, ignore=shutil.ignore_patterns('__pycache__'))
             shutil.copy(repo / 'pyproject.toml', root / 'pyproject.toml')
             (root / path).write_text(mutated)

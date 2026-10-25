@@ -331,6 +331,8 @@ class Supervisor:
 
     def write_status(self):
         status = self.journal.status()
+        status.update(schema_version=1, mode='separate',
+                      heartbeat_max_age_seconds=max(10, self.config.poll_interval_ms / 1000 * 3))
         status.update(enabled_lanes=[l.name for l in self.config.lanes],
                       operator_runs=self.journal.operator_runs(),
                       claim_state="held" if self.ownership.claims else "released",

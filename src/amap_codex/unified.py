@@ -31,6 +31,7 @@ class UnifiedService:
         self.backlog = False
         self.stop_requested = asyncio.Event()
         self.effective = None
+        self.tools_validation = None
         self.status = None
 
     def _record_process(self, pid, proc_start):
@@ -66,6 +67,8 @@ class UnifiedService:
                 # A named empty thread has a saved rollout in the measured build.
                 await client.request('thread/name/set', {'threadId': actual, 'name': 'AMAP unified conversation'})
             await validate_tools(client, actual, protected)
+            self.tools_validation = {'scope': 'startup', 'backend_generation': self.backend.generation,
+                                     'validated_at': time.time()}
             sandbox_type = {'read-only': 'readOnly', 'workspace-write': 'workspaceWrite',
                             'danger-full-access': 'dangerFullAccess'}[c.sandbox]
             if (not isinstance(result.get('model'), str) or result.get('approvalPolicy') != c.approval_policy
@@ -139,7 +142,9 @@ class UnifiedService:
 
     async def observe(self):
         try:
-            return await self.queue.reconcile()
+            clean, history, pending = await self.queue.reconcile()
+            state = history.get('thread', {}).get('status', {})
+            return clean and isinstance(state, dict) and state.get('type') in {'idle', 'active'}, history, pending
         except (IntegrityConflict, RPCError, Uncertain):
             # A turn can begin between turn and item pagination. Hold new AMAP
             # dispatch/attachments while observing again; do not kill authorized
@@ -148,9 +153,11 @@ class UnifiedService:
             return False, None, None
 
     def write_status(self, clean, history, pending):
-        runtime = history['thread']['status'] if history else None
+        runtime = history['thread'].get('status') if history else None
+        native_state = runtime.get('type') if isinstance(runtime, dict) else None
+        known_state = native_state in {'idle', 'active'}
         turns = history['thread']['turns'] if history else []
-        active = next((t for t in reversed(turns) if t['status'] == 'inProgress'), None) if runtime and runtime['type'] == 'active' else None
+        active = next((t for t in reversed(turns) if t['status'] == 'inProgress'), None) if native_state == 'active' else None
         active_source = None
         if active:
             event = self.journal.db.execute('SELECT lane FROM events WHERE turn_id=?', (active['id'],)).fetchone()
@@ -164,16 +171,21 @@ class UnifiedService:
         checks = {'backend_live': self.backend.process.returncode is None,
                   'canonical_binding': history['thread']['id'] == self.journal.thread_id if history else None,
                   'configuration_matches': self.journal.status()['fingerprint'] == self.config.fingerprint(),
-                  'protected_tools': True, 'native_reconciled': clean if history else None,
+                  'protected_tools': bool(self.tools_validation and
+                      self.tools_validation['backend_generation'] == self.backend.generation),
+                  'native_reconciled': clean and known_state if history else None,
                   'publication_resolved': self.journal.db.execute("SELECT 1 FROM outcome_transitions "
                       "WHERE publication_state IN ('publishing','ambiguous') LIMIT 1").fetchone() is None}
         self.status = {**self.journal.status(), 'schema_version': 1, 'mode': 'unified',
             'backend_generation': self.backend.generation, 'canonical_thread_id': self.journal.thread_id,
             'endpoint': 'unix://' + str(self.backend.front_path), 'backend_pid': self.backend.process.pid,
             'attached_client_count': self.gate.client_count if self.gate else 0,
-            'scheduler_state': 'reconciling' if history is None else 'holding' if not clean else runtime['type'],
+            'scheduler_state': 'reconciling' if history is None else 'unknown' if not known_state else
+                               'holding' if not clean else native_state,
             'active_input_source': active_source, 'queue_depth': len(pending) if pending is not None else None, 'queue_sources': sources,
             'effective_settings': self.effective, 'blocked_requests': self.backend.client.blocked,
+            'protected_tools_validation': self.tools_validation,
+            'heartbeat_max_age_seconds': max(10, self.config.poll_interval_ms / 1000 * 3),
             'supervisor_pid': os.getpid(), 'updated_at': time.time(),
             'claim_state': 'held', 'enabled_lanes': [l.name for l in self.config.lanes],
             'readiness': {'state': 'ready' if all(v is True for v in checks.values()) else 'holding',

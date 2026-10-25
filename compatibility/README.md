@@ -382,7 +382,7 @@ reply correlation retained. A queued file is not runtime acceptance or a send.
 
 Reproduce with `PYTHONPATH=src python tests/integration/unified_runtime_probe.py
 --output /tmp/unified-runtime.json`; use `python tests/mutations/unified_runtime.py`
-for 52 critical guard mutations on scratch copies. See
+for 60 critical guard mutations on scratch copies. See
 [the runtime contract](../docs/UNIFIED_RUNTIME.md) for configuration, named status
 facts and remaining adoption/recovery/adapter gates. This evidence does not make
 the current fleet ready to activate unified mode.

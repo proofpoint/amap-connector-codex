@@ -41,6 +41,8 @@ def attachment():
             'fingerprint': c.fingerprint(), 'canonical_thread_id': THREAD, 'backend_generation': generation,
             'endpoint': 'unix://' + str(path), 'updated_at': time.time(), 'attached_client_count': 0,
             'codex_version': c.codex_version,
+            'protected_tools_validation': {'scope': 'startup', 'backend_generation': generation, 'validated_at': time.time()-1},
+            'heartbeat_max_age_seconds': 10, 'scheduler_state': 'idle',
             'effective_settings': {'model': 'fixture', 'approval_policy': c.approval_policy,
                                    'sandbox': {'type': 'workspaceWrite'}},
             'readiness': {'state': 'ready', 'checks': dict.fromkeys(
@@ -102,3 +104,32 @@ def test_second_or_unknown_client_is_refused(attachment, count):
     v['attached_client_count'] = count
     write()
     with pytest.raises(ValueError): attachment_argv(c, wait=0)
+
+
+@pytest.mark.parametrize('change', ['validation', 'validation_generation', 'validation_time', 'freshness_bound', 'scheduler'])
+def test_attachment_requires_generation_validation_and_published_status_contract(attachment, change):
+    c, v, write = attachment
+    if change == 'validation': v.pop('protected_tools_validation')
+    elif change == 'validation_generation': v['protected_tools_validation']['backend_generation'] = 'foreign'
+    elif change == 'validation_time': v['protected_tools_validation']['validated_at'] = v['updated_at'] + 1
+    elif change == 'freshness_bound': v['heartbeat_max_age_seconds'] = 99999
+    else: v['scheduler_state'] = 'unknown'
+    write()
+    with pytest.raises(ValueError): descriptor(c)
+
+
+def test_bounded_attachment_reports_a_specific_hold_reason(attachment):
+    c, v, write = attachment
+    v['updated_at'] -= 60
+    write()
+    with pytest.raises(ValueError, match='fresh service heartbeat'):
+        attachment_argv(c, wait=0)
+
+
+def test_attachment_reports_named_service_hold_without_another_wait(attachment):
+    c, v, write = attachment
+    v['readiness']['state'] = 'holding'
+    v['readiness']['checks']['native_reconciled'] = 'unknown'
+    write()
+    with pytest.raises(ValueError, match='native_reconciled=unknown'):
+        attachment_argv(c, wait=0)

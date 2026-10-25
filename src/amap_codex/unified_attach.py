@@ -19,12 +19,17 @@ def descriptor(config):
     if (not isinstance(value, dict) or type(value.get('schema_version')) is not int
             or value['schema_version'] != 1 or value.get('mode') != 'unified'
             or value.get('instance_id') != config.instance_id or value.get('fingerprint') != config.fingerprint()
-            or value.get('codex_version') != config.codex_version
-            or not isinstance(value.get('readiness'), dict) or value['readiness'].get('state') != 'ready'):
-        raise ValueError('unified service is holding, stopped or configured differently')
-    checks = value['readiness'].get('checks')
+            or value.get('codex_version') != config.codex_version):
+        raise ValueError('unified instance, mode, schema or configuration does not match')
     required = {'backend_live', 'canonical_binding', 'configuration_matches', 'protected_tools',
                 'native_reconciled', 'publication_resolved'}
+    readiness = value.get('readiness')
+    checks = readiness.get('checks') if isinstance(readiness, dict) else None
+    if not isinstance(readiness, dict) or readiness.get('state') != 'ready':
+        facts = checks if isinstance(checks, dict) else {}
+        detail = ', '.join(k + '=' + (facts[k] if facts.get(k) in {'fail', 'unknown'} else 'unknown')
+                           for k in sorted(required) if facts.get(k) != 'pass')
+        raise ValueError('unified service is holding or stopped' + (': ' + detail if detail else ''))
     if not isinstance(checks, dict) or not required <= checks.keys() or any(v != 'pass' for v in checks.values()):
         raise ValueError('unified readiness has missing, failed or unknown facts')
     effective = value.get('effective_settings')
@@ -41,6 +46,14 @@ def descriptor(config):
     if (not isinstance(generation, str) or not re.fullmatch('[a-f0-9]{32}', generation)
             or not isinstance(thread, str) or not SESSION_ID.fullmatch(thread)):
         raise ValueError('unified canonical generation or thread is invalid')
+    validation = value.get('protected_tools_validation')
+    if (not isinstance(validation, dict) or validation.get('scope') != 'startup'
+            or validation.get('backend_generation') != generation
+            or type(validation.get('validated_at')) not in {int, float}
+            or not 0 < validation['validated_at'] <= stamp
+            or value.get('heartbeat_max_age_seconds') != max(10, config.poll_interval_ms / 1000 * 3)
+            or value.get('scheduler_state') not in {'idle', 'active'}):
+        raise ValueError('unified startup validation, freshness bound or scheduler state is unavailable or mismatched')
     status = read_status(config)
     if status.get('thread_id') != thread or status.get('fingerprint') != value['fingerprint']:
         raise ValueError('unified descriptor differs from the durable journal binding')
@@ -59,9 +72,9 @@ def attachment_argv(config, *, native_argv=None, binary=None, wait=30):
         try:
             value = descriptor(config)
             break
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
             if time.monotonic() >= deadline:
-                raise ValueError('unified connector is not ready; inspect status and the service hold; no fallback was started') from None
+                raise ValueError('unified connector is not ready: ' + str(exc)[:256] + '; no fallback was started') from None
             time.sleep(min(.1, max(0, deadline - time.monotonic())))
     if type(value.get('attached_client_count')) is not int or value['attached_client_count'] != 0:
         raise ValueError('the canonical conversation already has a writable terminal client')

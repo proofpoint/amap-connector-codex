@@ -19,7 +19,9 @@ from .supervisor import Ownership, Supervisor, atomic_json
 
 def read_status(config):
     path = config.state_dir / "journal.sqlite3"
-    base = {"instance_id": config.instance_id, "enabled_lanes": [l.name for l in config.lanes]}
+    base = {"instance_id": config.instance_id, "enabled_lanes": [l.name for l in config.lanes],
+            'schema_version': 1, 'mode': config.conversation_mode,
+            'heartbeat_max_age_seconds': max(10, config.poll_interval_ms / 1000 * 3)}
     if not path.exists():
         return {**base, "state": "not_started", "thread_id": None, "pending_count": 0, "uncertain_count": 0}
     if path.is_symlink():
@@ -76,7 +78,8 @@ def read_status(config):
                         and recorded.get('canonical_thread_id') == instance['thread_id'] and recorded.get('mode') == 'unified'):
                     for key in ('schema_version', 'mode', 'backend_generation', 'canonical_thread_id', 'endpoint',
                                 'backend_pid', 'attached_client_count', 'scheduler_state', 'active_input_source',
-                                'queue_depth', 'queue_sources', 'effective_settings', 'readiness'):
+                                'queue_depth', 'queue_sources', 'effective_settings', 'readiness',
+                                'protected_tools_validation', 'heartbeat_max_age_seconds'):
                         if key in recorded: status[key] = recorded[key]
                 else:
                     status['readiness'] = {'state': 'unknown', 'checks': {}}

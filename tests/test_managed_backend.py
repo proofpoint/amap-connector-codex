@@ -70,3 +70,24 @@ def test_owned_child_start_stop_and_failed_initialization_cleanup(failure):
                 assert backend.process.returncode is not None and not backend.directory.exists()
             await backend.stop()
     asyncio.run(check())
+
+
+def test_native_alias_target_respects_portable_socket_path_bound():
+    with tempfile.TemporaryDirectory(prefix='aq-') as directory:
+        root = Path(directory).resolve()
+        padding = 98 - len(os.fsencode(root))
+        if padding < 1: pytest.skip('system temporary directory already exceeds test socket bound')
+        target = root / ('x' * padding)
+        target.mkdir(mode=0o700)
+        endpoint = target / 's'
+        assert len(os.fsencode(endpoint)) == 101
+        listener = socket.socket(socket.AF_UNIX)
+        try:
+            listener.bind(str(endpoint))
+            endpoint.chmod(0o600)
+            alias = root / 'b'
+            alias.symlink_to(endpoint)
+            with pytest.raises(ValueError, match='portable Unix socket length'):
+                private_socket(alias, allow_owned_alias=True)
+        finally:
+            listener.close()

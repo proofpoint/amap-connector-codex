@@ -50,7 +50,9 @@ permission flags are validated and consumed: native remote resume rejects CLI
 permission overrides and inherits the managed thread's verified policy.
 Model selection is reflected in the actual native client and backend.
 
-The wrapper waits at most 30 seconds for readiness, then reports a hold. It
+The wrapper waits at most 30 seconds for readiness, then reports the specific
+hold (for example stale heartbeat or mismatched startup validation). Adapters
+should use this one wait instead of adding another readiness polling timeout. It
 never starts another backend or chooses an ambient conversation. The gateway
 is authoritative for the one-client lease, including simultaneous attach races.
 Closing a terminal preserves the service, incoming work and conversation.
@@ -63,9 +65,12 @@ the existing explicit migration rules; do not delete state to activate this mode
 
 The controller holds the normal instance lock and every enabled AMAP claim.
 Each backend execution gets a fresh private directory and endpoint generation.
-The native endpoint may be an owned alias into a private native socket
+The requested native endpoint is `state_dir/u-<32 hex generation>/b`; the
+terminal gateway is the same generation's `/t`. The native endpoint may be an owned alias into a private native socket
 directory; its parent, alias owner, target parent, target owner/type and private
-permissions are checked. Only the freshly launched explicit endpoint is used.
+permissions and the resolved target's 100-byte socket-path bound are checked.
+The native build chooses the target directory; adapters must not derive its
+name or discover another daemon through it. Only the freshly launched explicit endpoint is used.
 The terminal gateway itself is a real private socket in the instance state.
 
 Human interaction stays native. The gateway restricts conversation selection
@@ -117,7 +122,12 @@ Unix socket paths (100 bytes for the generated native endpoint). Keep payload
 files and operator policy protected. Keep runtime sockets out of lane roots and
 shared workspaces. Do not edit shared authentication or global MCP registration.
 
-`status` exposes schema version 1 facts, sourced from the matching journal and
+Both separate and unified `status` declare `schema_version = 1` and `mode`;
+[the JSON Schema](status.schema.json) describes the additive public format,
+including a not-started or held instance. Schema validation alone does not
+establish freshness or matching generation/binding.
+
+Unified `status` exposes facts sourced from the matching journal and
 service snapshot. `unified.json` is the private attachment descriptor:
 
 | Field | Meaning |
@@ -128,10 +138,19 @@ service snapshot. `unified.json` is the private attachment descriptor:
 | `endpoint` | Exact private terminal gateway URI |
 | `attached_client_count` | Zero or one authoritative gateway lease |
 | `scheduler_state` | Native state, holding or reconciling |
+| `heartbeat_max_age_seconds` | Published freshness bound: max(10, three polling intervals) |
+| `protected_tools_validation` | Startup validation scope, timestamp and backend generation |
 | `active_input_source` | Operator/mail/peer when established, otherwise null |
 | `queue_depth`, `queue_sources` | Observed native queue, otherwise null |
 | `effective_settings` | Model, permissions and configuration sources |
 | `readiness` | Ready/holding/stopped with named pass/fail/unknown facts |
+
+The closed scheduler vocabulary is `idle`, `active`, `holding`, `reconciling`,
+`unknown`. An unrecognized native state publishes `unknown` and blocks new
+dispatch and readiness. `protected_tools` means the protected registry was
+successfully validated at startup for this backend generation; it is not a
+continuous health check of every tool server. Configuration-changing controls
+are refused for attached clients. Tool execution errors remain visible natively.
 
 Readiness requires the matching live backend, canonical binding, current
 configuration, validated protected tools, reconciled native state and no
@@ -139,6 +158,13 @@ ambiguous outcome publication. Optional unconfigured outcomes are not a send or
 publication success. Missing facts, stale heartbeats, changed builds/models,
 foreign generations and mismatched journal bindings do not become ready defaults.
 Retain the adapter's bounded startup hold and service logs.
+
+The adapter must resolve the pane and service model from the same selection.
+If an isolation launcher supplies an explicit model override, render that same
+selection into `codex_model` where possible. Otherwise require the override to
+be unset or equal to the configured native model and report the mismatch in
+verification. Attachment refuses a different model; it never silently changes
+the backend to satisfy a terminal flag. The same rule applies to pane permissions.
 
 Prepare adapter changes as unmerged PRs for both its current development line
 and the deployed release line. Preserve unrelated release pins. Supply an
@@ -169,6 +195,6 @@ distinct gates.
 python tests/mutations/unified_runtime.py
 ```
 
-This inventory disables 52 critical transport, ownership, queue, policy and
+This inventory disables 60 critical transport, ownership, queue, policy and
 attachment guards on independent scratch copies and requires the negative
 controls to detect each mutation. It never mutates repository source files.

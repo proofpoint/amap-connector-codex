@@ -27,6 +27,8 @@ def private_socket(path, *, allow_owned_alias=False):
         if info.st_uid != os.getuid():
             raise ValueError('runtime endpoint alias has another owner')
         target = path.resolve(strict=True)
+        if len(os.fsencode(target)) > 100:
+            raise ValueError('native socket target exceeds portable Unix socket length')
         private_directory(target.parent)
         info = target.lstat()
     if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:
