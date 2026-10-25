@@ -75,9 +75,11 @@ def main():
         ('native_queue.py', 'queue client association', "item.get('clientUserMessageId') != intent['client_id']", 'False'),
         ('native_queue.py', 'native queue ID uniqueness', 'if not isinstance(queue_id, str) or not queue_id or queue_id in queue_ids:', 'if False:'),
         ('native_queue.py', 'one native queue cannot bind multiple attempts', 'if len(matches) != 1:', 'if False:'),
+        ('unified_policy.py', 'explicit absolute native workspace', "if not isinstance(native_cwd, str) or not native_cwd or not Path(native_cwd).is_absolute():", 'if False:'),
+        ('unified.py', 'startup workspace evidence required', "or not workspace_matches(result.get('cwd'), c.cwd)", ''),
     ]
     tests = ['tests/test_local_socket.py', 'tests/test_local_rpc.py', 'tests/test_native_queue.py',
-             'tests/test_attach_gate.py', 'tests/test_managed_backend.py', 'tests/test_unified_attach.py', 'tests/test_unified_status.py']
+             'tests/test_attach_gate.py', 'tests/test_managed_backend.py', 'tests/test_unified_attach.py', 'tests/test_unified_status.py', 'tests/test_unified_workspace.py']
     for filename, name, old, new in cases:
         path = Path('src/amap_codex') / filename
         source = (repo / path).read_text()

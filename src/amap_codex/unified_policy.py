@@ -18,6 +18,15 @@ Follow the standing operator workflow within this pane's selected permissions.
 """
 
 
+def workspace_matches(native_cwd, expected):
+    if not isinstance(native_cwd, str) or not native_cwd or not Path(native_cwd).is_absolute():
+        return False
+    try:
+        return Path(native_cwd).resolve() == Path(expected).resolve()
+    except (OSError, ValueError, RuntimeError):
+        return False
+
+
 async def resolve(client, config, config_path):
     native = (await client.request('config/read', {'cwd': config.cwd})).get('config')
     if not isinstance(native, dict):

@@ -23,6 +23,9 @@ options, before `app-server`. It is an argument vector, never shell text. The
 existing `launch_argv` remains in configuration for the separate-mode contract;
 unified mode launches its own managed Unix backend using `unified_argv`.
 `codex_model`, `sandbox` and `approval_policy` resolve the shared pane settings.
+Native workspace evidence must be a nonempty absolute path matching the configured
+workspace. Missing, empty or relative native paths never fall back to the local
+service process directory.
 An explicit native model or permission flag must match them. An audited model
 change on service restart keeps the canonical thread; protected policy changes
 continue to require an explicit transition.
@@ -201,6 +204,6 @@ distinct gates.
 python tests/mutations/unified_runtime.py
 ```
 
-This inventory disables 65 critical transport, ownership, queue, policy and
+This inventory disables 67 critical transport, ownership, queue, policy and
 attachment guards on independent scratch copies and requires the negative
 controls to detect each mutation. It never mutates repository source files.
