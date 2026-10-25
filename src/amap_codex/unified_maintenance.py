@@ -5,9 +5,9 @@ from pathlib import Path
 
 from .interactive import SESSION_ID
 from .journal import Journal, IntegrityConflict, StateConflict, DEFAULT_MODEL
-from .native_queue import QueueLedger, snapshot
+from .native_queue import QueueLedger, associated_pending, snapshot
 from .unified import UnifiedService
-from .unified_policy import resolve, validate_tools
+from .unified_policy import resolve, validate_tools, workspace_matches
 
 
 def history_digest(history):
@@ -63,7 +63,7 @@ async def adopt(config, config_path, previous, thread_id, note, *, env=None):
         settings, protected, digest = await resolve(client, config, config_path)
         before, pending = await snapshot(client, thread_id)
         if (pending or any(t['status'] == 'inProgress' for t in before['thread']['turns'])
-                or Path(before['thread'].get('cwd', '')).resolve() != Path(config.cwd).resolve()):
+                or not workspace_matches(before['thread'].get('cwd'), config.cwd)):
             raise StateConflict('adoption requires an idle saved history in this workspace with no native queued work')
         original = history_digest(before)
         journal.db.execute('''CREATE TABLE IF NOT EXISTS unified_adoptions (
@@ -87,7 +87,7 @@ async def adopt(config, config_path, previous, thread_id, note, *, env=None):
                 or (config.codex_model is not None and result['model'] != config.codex_model)
                 or result.get('approvalPolicy') != config.approval_policy
                 or result.get('sandbox', {}).get('type') != sandbox
-                or Path(result.get('cwd', '')).resolve() != Path(config.cwd).resolve()):
+                or not workspace_matches(result.get('cwd'), config.cwd)):
             raise IntegrityConflict('adoption did not retain the selected thread and configured pane settings')
         await validate_tools(client, thread_id, protected)
         # Resuming a populated history retains its old developer context on
@@ -150,15 +150,16 @@ async def dispose(config, config_path, event_id, action, note, *, cancel_queued=
             client_id TEXT NOT NULL, input_sha256 TEXT NOT NULL, history_sha256 TEXT NOT NULL,
             state TEXT NOT NULL)''')
         deletion = journal.db.execute('SELECT * FROM native_queue_deletions WHERE event_id=?', (event_id,)).fetchone()
-        queued = [q for q in pending if intent and q.get('clientUserMessageId') == intent['client_id']]
+        if deletion and intent is None:
+            raise IntegrityConflict('recorded native deletion has no durable queue intent')
+        queued = associated_pending(intent, pending, queue_id=deletion['queue_id'] if deletion else None) if intent else []
         if len(queued) > 1:
             raise IntegrityConflict('duplicate pending identities require individual native queue inspection')
         if queued:
             q = queued[0]
             if not cancel_queued:
                 raise StateConflict('pending native input requires explicit --cancel-queued before disposition')
-            if (intent['thread_id'] != journal.thread_id or not isinstance(q.get('id'), str) or not q['id']
-                    or (intent['queue_id'] is not None and q['id'] != intent['queue_id'])):
+            if intent['thread_id'] != journal.thread_id:
                 raise IntegrityConflict('native queue association differs from the recorded attempt')
             record = (event_id, journal.thread_id, q['id'], intent['client_id'],
                       hashlib.sha256(json.dumps(q['input'], sort_keys=True).encode()).hexdigest(),

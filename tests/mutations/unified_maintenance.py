@@ -22,7 +22,7 @@ def main():
         ('unified_maintenance.py', 'confirmed adoption clears only its hold', 'journal.db.execute("UPDATE unified_adoptions SET state=\'confirmed\' WHERE singleton=1")', 'pass'),
         ('unified_maintenance.py', 'duplicate pending input', 'if len(queued) > 1:', 'if False:'),
         ('unified_maintenance.py', 'explicit cancellation', 'if not cancel_queued:', 'if False:'),
-        ('unified_maintenance.py', 'pending attempt association', "or (intent['queue_id'] is not None and q['id'] != intent['queue_id'])", ''),
+        ('native_queue.py', 'pending attempt association', "or (known and item.get('id') not in known)", ''),
         ('unified_maintenance.py', 'delete intent durable before write', "journal.db.execute('INSERT INTO native_queue_deletions VALUES(?,?,?,?,?,?,?)', record)", 'pass'),
         ('unified_maintenance.py', 'positive native delete acknowledgement', "if result != {'deleted': True}:", 'if False:'),
         ('unified_maintenance.py', 'deleted input no longer pending', "any(item.get('id') == q['id'] or item.get('clientUserMessageId') == intent['client_id'] for item in pending)", 'False'),
@@ -32,6 +32,10 @@ def main():
         ('unified_maintenance.py', 'operator hold remains sticky', "journal.db.execute('UPDATE native_queue_intents SET blocked=1 WHERE event_id=?', (event_id,))", 'pass'),
         ('unified_maintenance.py', 'protected policy explicitly refreshed', "await client.request('thread/inject_items', {'threadId': thread_id, 'items': [\n            {'type': 'message', 'role': 'developer', 'content': [\n                {'type': 'input_text', 'text': settings['developerInstructions']}]}]})", 'pass'),
         ('unified_maintenance.py', 'protected policy developer role', "'role': 'developer'", "'role': 'user'"),
+        ('unified_maintenance.py', 'native saved workspace required', "or not workspace_matches(before['thread'].get('cwd'), config.cwd)", ''),
+        ('unified_maintenance.py', 'native resumed workspace required', "or not workspace_matches(result.get('cwd'), config.cwd)", ''),
+        ('unified_maintenance.py', 'deletion retains independently persisted queue custody', "queue_id=deletion['queue_id'] if deletion else None", 'queue_id=None'),
+        ('native_queue.py', 'changed client cannot discard known queue custody', " or q.get('id') in known", ''),
     ]
     for filename, name, old, new in cases:
         path = Path('src/amap_codex') / filename

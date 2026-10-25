@@ -81,8 +81,9 @@ amap-codex --config /etc/amap-connector/unified.toml recover EVENT_ID \
 `--cancel-queued` authorizes removal of that event's recorded pending native
 input. Without it, a pending entry blocks disposition. The command never calls
 `thread/resume`, `turn/start` or `thread/queue/add`; it inspects and deletes before
-Codex can drain a saved queue. It matches the canonical thread, durable client
-identity and known queue association. Duplicated identities or changed queue
+Codex can drain a saved queue. It matches the canonical thread and both the
+durable client and known queue identities. A changed client ID cannot make a
+known queue entry unrelated human work. Duplicated identities or changed queue
 associations require investigation and are refused.
 
 A durable deletion intent records the exact queue/client IDs and hashes of the
@@ -93,6 +94,8 @@ blocks ordinary startup and migration. Re-run the explicit recovery command
 with `--cancel-queued`; it must re-observe matching pending input, or its absence
 with unchanged original history, before confirming the deletion. It never
 re-adds the model input.
+The deletion record's own queue ID retains custody even when a lost queue-
+admission acknowledgement left the admission intent without a queue ID.
 
 `handled` records `operator_handled`, not a native execution success or a
 fabricated delivered outcome. `hold` leaves the event uncertain with a sticky
@@ -101,6 +104,28 @@ subsequent explicit `handled` can finish that disposition. Keep
 `--cancel-queued` on subsequent commands for an existing deletion record.
 Publication results and outbound send acknowledgements retain their separate
 runtime-owned recovery rules.
+
+## Adapter confirmation contract
+
+For the pinned experimental implementation an adapter may confirm adoption by
+reading the retained journal without modifying it. Missing tables, columns,
+records or mismatched facts are unknown/refused, never a successful default.
+Require these records to agree before releasing an adapter transition hold:
+
+| Record | Required evidence |
+| --- | --- |
+| `instance` | Intended instance ID, target fingerprint and selected thread ID |
+| `unified_adoptions` singleton 1 | `state = confirmed`, expected previous and target fingerprints, selected thread ID, policy hash and original-history SHA256 |
+| `unified_binding` for that instance | Same selected thread ID and policy hash, with the resolved model |
+
+Require the recorded history and policy hashes to be nonempty SHA256 values,
+and compare the transition against the adapter's retained previous/target
+configuration and explicit selected thread. A ready status snapshot alone is
+not transition confirmation. A planned adoption or deletion blocks ordinary
+startup and migration. This read-only contract does not grant permission to
+repair tables or clear a hold; those remain explicit maintenance operations.
+The config pathname supplied to adoption must remain the final service config
+pathname because the protected activity-tool arguments bind that resolved path.
 
 ## Verification and remaining gates
 
@@ -119,7 +144,7 @@ queued artifacts after SIGKILL, explicitly cancels before resume and verifies no
 queued/human replay or fabricated delivery. The committed
 [build-specific receipt](../compatibility/unified-maintenance-0.164.0.json) is
 source evidence; it is not an actual-router round trip or host deployment test.
-Twenty-two critical maintenance mutations run only on independent scratch copies.
+Twenty-six critical maintenance mutations run only on independent scratch copies.
 Independent source review, adapter configuration/verification and the operator's
 host pilot remain gates. Additional native controls and exceptional history
 repair need their own contracts; these commands do not perform arbitrary

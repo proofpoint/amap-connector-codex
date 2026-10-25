@@ -47,9 +47,9 @@ class Native:
                 assert db.execute(f"SELECT state FROM {table}").fetchone()[0] == 'planned'
         if method == 'thread/queue/delete':
             if self.failure == 'false_ack': return {'deleted': False}
-            if self.failure != 'retained':
+            if self.failure not in {'retained', 'lost_ack_retained'}:
                 self.pending = [q for q in self.pending if q['id'] != params['queuedSubmissionId']]
-            if self.failure == 'lost_ack': raise Uncertain('synthetic lost delete acknowledgement')
+            if self.failure in {'lost_ack', 'lost_ack_retained'}: raise Uncertain('synthetic lost delete acknowledgement')
             if self.failure == 'false_ack_removed': return {'deleted': False}
             if self.failure == 'changed_history': self.turns[0]['items'][0]['content'] = []
             return {'deleted': True}
@@ -70,7 +70,7 @@ class Native:
 
 @pytest.fixture
 def case(tmp_path, monkeypatch):
-    previous = config_for(tmp_path)
+    previous = replace(config_for(tmp_path), cwd=str(tmp_path))
     trusted = tmp_path / 'trusted.toml'
     servers = {n: {'command': '/unused', 'required': True, 'enabled_tools': tools} for n, tools in [
         ('inbox', ['list_messages', 'read_message', 'read_attachment']),
@@ -256,3 +256,63 @@ def test_adoption_requires_explicit_uuid_and_same_local_execution_domain(case):
         asyncio.run(maintenance.adopt(target, Path('/unused'), old, '--last', 'Explicit selection'))
     with pytest.raises(ValueError): maintenance.same_namespace(replace(old, launcher_control_argv=['remote']), target)
     assert not native.calls
+
+
+@pytest.mark.parametrize('cancel', [False, True])
+def test_disposition_refuses_known_queue_id_with_changed_client(case, cancel):
+    target, native = queued_case(case)
+    native.pending[0]['clientUserMessageId'] = 'changed-client'
+    with pytest.raises(IntegrityConflict):
+        asyncio.run(maintenance.dispose(target, Path('/unused'), 'event1', 'handled', 'Inspect changed identity',
+                                       cancel_queued=cancel))
+    assert len(native.pending) == 1
+    assert not any(m == 'thread/queue/delete' for m, _ in native.calls)
+    with prepare(target) as j: assert j.event('event1')['state'] == 'queued'
+
+
+@pytest.mark.parametrize('queue_id_known', [False, True])
+def test_lost_delete_ack_cannot_confirm_gone_when_known_id_remains_with_changed_client(case, queue_id_known):
+    target, native = queued_case(case)
+    if not queue_id_known:
+        # Lost queue-admission acknowledgement: deletion must rely on its OWN
+        # persisted queue identity, not one copied from the admission receipt.
+        with prepare(target) as j:
+            j.db.execute('UPDATE native_queue_intents SET queue_id=NULL')
+            j._set('event1', 'uncertain', 'queue admission acknowledgement lost')
+    native.failure = 'lost_ack_retained'
+    with pytest.raises(Uncertain):
+        asyncio.run(maintenance.dispose(target, Path('/unused'), 'event1', 'handled', 'Cancel', cancel_queued=True))
+    native.pending[0]['clientUserMessageId'] = 'changed-client'
+    native.failure = None
+    with pytest.raises(IntegrityConflict):
+        asyncio.run(maintenance.dispose(target, Path('/unused'), 'event1', 'handled', 'Reconcile', cancel_queued=True))
+    assert len(native.pending) == 1
+    with prepare(target, maintenance=True) as j:
+        assert j.event('event1')['state'] == ('queued' if queue_id_known else 'uncertain')
+        assert j.db.execute('SELECT state FROM native_queue_deletions').fetchone()[0] == 'planned'
+    with pytest.raises(StateConflict): prepare(target)
+    assert [m for m, _ in native.calls].count('thread/queue/delete') == 1
+
+
+@pytest.mark.parametrize('phase', ['thread/read', 'thread/resume'])
+@pytest.mark.parametrize('cwd', ['present', 'missing', None, '', '.', 'relative', '/foreign'])
+def test_adoption_requires_explicit_absolute_native_workspace_at_each_boundary(case, monkeypatch, cwd, phase):
+    old, target, native = case
+    monkeypatch.chdir(target.cwd)
+    with prepare(old): pass
+    request = native.request
+    async def response(method, params, **kwargs):
+        result = await request(method, params, **kwargs)
+        if method == phase:
+            value = result['thread'] if phase == 'thread/read' else result
+            if cwd == 'missing': value.pop('cwd')
+            elif cwd != 'present': value['cwd'] = cwd
+        return result
+    native.request = response
+    if cwd == 'present':
+        assert asyncio.run(maintenance.adopt(target, Path('/unused'), old, THREAD, 'Select history'))['history_retained']
+    else:
+        with pytest.raises((ValueError, StateConflict, IntegrityConflict)):
+            asyncio.run(maintenance.adopt(target, Path('/unused'), old, THREAD, 'Select history'))
+        assert not any(m == 'thread/inject_items' for m, _ in native.calls)
+    assert not any(m in {'turn/start', 'thread/queue/add'} for m, _ in native.calls)
