@@ -340,6 +340,10 @@ python tests/mutations/native_queue_probe.py
   same TUI. Backend execution survives terminal detachment, and reattachment
   retains exact ordered earlier history without another turn.
 - Two distinct pending inputs execute once after backend SIGKILL/resume.
+  Exact add receipts bind the pre-crash queue, and each retained input maps to
+  its own completed turn. The original human item/turn and provider active-input
+  sequence are checked explicitly; duplicate/missing inputs or human replay
+  cannot substitute for the second retained input.
   Queue reads can already show a consumed entry while its original input is
   not yet inspectable. A decreased pending count is not evidence of loss.
 - Discarding an add acknowledgement is reconciled through pending state and
@@ -357,8 +361,9 @@ python tests/mutations/native_queue_probe.py
 
 The terminal fixture establishes a controlling PTY before exec so native
 keyboard handling is exercised, as well as rendering. Offline negative controls
-and eight scratch-copy mutations cover original-input identity/content/status
-and passive approval observation. This adds no production delivery mode and
+and twenty-one scratch-copy mutations cover original-input identity/content/status,
+recovery membership/turn associations, provider dispatch and passive approval
+observation. This adds no production delivery mode and
 does not verify exhaustive pagination, arbitrary crash windows, multi-client
 authorization, other approval types, model/permission changes, real AMAP
 reader/submit behavior, deployment or isolation acceptance. See
