@@ -163,3 +163,18 @@ def test_status_activity_and_attachment_share_ready_evidence(attachment, bad):
         assert status['readiness']['state'] == 'ready'
         assert activity['readiness']['state'] == 'ready'
         assert descriptor(c)['readiness']['state'] == 'ready'
+
+
+def test_activity_rechecks_freshness_after_reading_delivery_metadata(attachment, monkeypatch):
+    from amap_codex.interactive import read_activity
+    c, v, _ = attachment
+    (c.state_dir / 'status.json').write_text(json.dumps(v))
+    calls = 0
+    def clock():
+        nonlocal calls
+        calls += 1
+        return v['updated_at'] + (0 if calls == 1 else 60)
+    monkeypatch.setattr(time, 'time', clock)
+    activity = read_activity(c)
+    assert activity['heartbeat'] == 'stale'
+    assert activity['readiness']['state'] == 'unknown'

@@ -77,6 +77,8 @@ def main():
         ('native_queue.py', 'one native queue cannot bind multiple attempts', 'if len(matches) != 1:', 'if False:'),
         ('unified_policy.py', 'explicit absolute native workspace', "if not isinstance(native_cwd, str) or not native_cwd or not Path(native_cwd).is_absolute():", 'if False:'),
         ('unified.py', 'startup workspace evidence required', "or not workspace_matches(result.get('cwd'), c.cwd)", ''),
+        ('interactive.py', 'activity revalidates at publication', 'validate_ready(config, status, status)', 'None'),
+        ('unified_readiness.py', 'queue counts agree', ' or sum(sources.values()) != depth', ''),
     ]
     tests = ['tests/test_local_socket.py', 'tests/test_local_rpc.py', 'tests/test_native_queue.py',
              'tests/test_attach_gate.py', 'tests/test_managed_backend.py', 'tests/test_unified_attach.py', 'tests/test_unified_status.py', 'tests/test_unified_workspace.py']
