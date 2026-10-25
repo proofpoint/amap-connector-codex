@@ -43,6 +43,7 @@ def attachment():
             'codex_version': c.codex_version,
             'protected_tools_validation': {'scope': 'startup', 'backend_generation': generation, 'validated_at': time.time()-1},
             'heartbeat_max_age_seconds': 10, 'scheduler_state': 'idle',
+            'queue_depth': 0, 'queue_sources': {'operator': 0, 'mail': 0, 'peer': 0},
             'effective_settings': {'model': 'fixture', 'approval_policy': c.approval_policy,
                                    'sandbox': {'type': 'workspaceWrite'}},
             'readiness': {'state': 'ready', 'checks': dict.fromkeys(
@@ -133,3 +134,32 @@ def test_attachment_reports_named_service_hold_without_another_wait(attachment):
     write()
     with pytest.raises(ValueError, match='native_reconciled=unknown'):
         attachment_argv(c, wait=0)
+
+
+@pytest.mark.parametrize('bad', [None, 'stale', 'empty_checks', 'missing_check', 'generation',
+                               'schema', 'validation', 'queue', 'model', 'sandbox_shape'])
+def test_status_activity_and_attachment_share_ready_evidence(attachment, bad):
+    from amap_codex.cli import read_status
+    from amap_codex.interactive import read_activity
+    c, v, write = attachment
+    if bad == 'stale': v['updated_at'] -= 60
+    elif bad == 'empty_checks': v['readiness']['checks'] = {}
+    elif bad == 'missing_check': v['readiness']['checks'].pop('native_reconciled')
+    elif bad == 'generation': v['backend_generation'] = 'foreign'
+    elif bad == 'schema': v['schema_version'] = 2
+    elif bad == 'validation': v['protected_tools_validation']['backend_generation'] = 'foreign'
+    elif bad == 'queue': v['queue_depth'] = 7
+    elif bad == 'model': v['effective_settings']['model'] = None
+    elif bad == 'sandbox_shape': v['effective_settings']['sandbox'] = None
+    write()
+    (c.state_dir / 'status.json').write_text(json.dumps(v))
+    status = read_status(c)
+    activity = read_activity(c)
+    if bad:
+        assert status['readiness']['state'] == 'unknown'
+        assert activity['readiness']['state'] == 'unknown'
+        with pytest.raises(ValueError): descriptor(c)
+    else:
+        assert status['readiness']['state'] == 'ready'
+        assert activity['readiness']['state'] == 'ready'
+        assert descriptor(c)['readiness']['state'] == 'ready'

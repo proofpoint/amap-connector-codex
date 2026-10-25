@@ -126,6 +126,9 @@ Both separate and unified `status` declare `schema_version = 1` and `mode`;
 [the JSON Schema](status.schema.json) describes the additive public format,
 including a not-started or held instance. Schema validation alone does not
 establish freshness or matching generation/binding.
+Public status, activity and attachment share the same ready-evidence validator.
+Stale or incomplete public snapshots report unknown readiness; a copied ready
+label alone is never accepted.
 
 Unified `status` exposes facts sourced from the matching journal and
 service snapshot. `unified.json` is the private attachment descriptor:
@@ -195,6 +198,6 @@ distinct gates.
 python tests/mutations/unified_runtime.py
 ```
 
-This inventory disables 60 critical transport, ownership, queue, policy and
+This inventory disables 61 critical transport, ownership, queue, policy and
 attachment guards on independent scratch copies and requires the negative
 controls to detect each mutation. It never mutates repository source files.
