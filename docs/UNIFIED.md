@@ -80,16 +80,33 @@ their ownership, recovery and permission behavior has been implemented.
 
 ## Policy and approvals
 
-The unified conversation retains the operator's model, sandbox, approval and
-native tool settings, with required protected AMAP tools and developer policy.
-It must not inherit a separate receiver's broader permissions merely because
-mail or a peer request arrived.
+The operator explicitly chose the pane's permissions for all unified inputs.
+Human, mail and peer turns therefore share the pane's sandbox and approval
+policy, including danger-full-access with no approvals when that is the
+operator-selected pane policy. Do not silently substitute a more restrictive
+incoming-turn policy or a different receiver policy. A message body cannot
+change those settings; permission changes require authenticated operator control.
+
+Resolve the initial model and permission settings before starting the managed
+thread. An explicit native model selection must agree with the service's
+resolved model, or startup refuses and names the mismatch. Never let the pane
+display one model while incoming work silently uses another configuration
+source. Subsequent supported operator changes go through the controller and
+are recorded with their effective settings. Protected AMAP tools and developer
+policy remain required, while approved native tools are retained.
 
 All approval/user-input requests have one authoritative routing decision. The
 current headless responder must not race a terminal response. With an eligible
 attached terminal, route the request to the operator; without one, hold the
 work without granting permission or replaying the accepted turn. Approval
 replies from the wrong session or backend generation are refused.
+
+The first production mode permits one writable terminal client per instance.
+A second attach is refused with an explicit existing-client message. It must
+not silently become another input producer or an unverified read-only client.
+Detachment releases the client lease while preserving the backend, queue and
+conversation. Read-only additional views can be added after their protocol
+behavior and request restrictions are independently verified.
 
 Established history keeps old developer context. Refresh protected policy
 through the measured supported API, while idle, before accepting further work.
@@ -110,6 +127,48 @@ bound to its original thread until an operator resolves it. A switch of mode
 or canonical thread is an audited transition, not an implicit consequence of
 starting a terminal. A future reset/new-chat action must use the same transition
 rules; unrestricted terminal thread creation cannot bypass them.
+
+## Adapter launch and status contract
+
+The runtime endpoint belongs in an instance-private state/runtime directory,
+not the protected read-only payload, workspace, mail/peer lanes or a shared
+host-access endpoint. The adapter supplies the private state location through
+its generic environment contract; the connector publishes the exact endpoint
+in its protected descriptor. The launcher consumes that descriptor and never
+derives a socket path from a workspace name or chooses an ambient daemon.
+
+In unified mode, both a fresh native launch and native `resume --last` mean
+attach a terminal to the already registered canonical thread. Neither performs
+native `--last` discovery or silently starts a different conversation. An
+explicit selector naming another thread is refused. A new terminal client and
+a reset of the canonical conversation are separate operations; a reset needs
+the audited transition above. Initial adoption of pre-existing interactive
+history is a dedicated operator action before ordinary attachment.
+
+Startup and reconciliation expose a holding service rather than a successful
+but disconnected pane. The adapter retains its normal hold record and bounded
+launch wait. Readiness requires a live matching backend generation, the bound
+canonical thread, matching configuration/build, refreshed policy, validated
+protected tools, and reconciled scheduler state. An unavailable fact is unknown,
+never a ready default.
+
+Status must expose at least:
+
+| Fact | Meaning |
+| --- | --- |
+| Mode | Explicit separate or unified mode |
+| Backend generation | Identity of this owned backend execution |
+| Canonical thread | Exact bound conversation ID |
+| Attached client count | Current terminal leases, with at most one writer |
+| Scheduler state | Idle, active, holding or reconciling |
+| Active input source | Operator, mail or peer when known |
+| Queue depth | Pending inputs, with source counts |
+| Effective model and permissions | Resolved settings and their configuration source |
+| Readiness checks | Named pass/fail/unknown evidence for the launch gate |
+
+These facts belong in structured status, not log parsing. Missing fields remain
+unknown to an adapter. Field encoding/versioning will be fixed with the runtime
+implementation; this document does not claim these fields already exist.
 
 ## Plan, implement, verify
 
