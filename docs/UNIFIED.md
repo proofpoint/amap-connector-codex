@@ -212,6 +212,12 @@ a deterministic localhost server supplies synthetic Responses API events.
 The human request is briefly held so active state can be observed. Controller
 pointer turns are submitted only after completion, and both responses appear
 in the same terminal. Reattachment renders the same three-turn history.
+Each original machine-input item must contain the complete expected pointer in
+its accepted turn, exactly once. The probe snapshots the full ordered turn and
+item data before detachment and requires exact equality after reattachment.
+Equal turn counts or a surviving final marker alone do not establish retention.
+Offline negative controls cover changed/missing lane and notice fields, wrong
+turns, duplicates, echoed items, changed IDs/content/status and reordered history.
 
 This proves transport, subscription, original pointer retention and native
 rendering in the scripted sequence. It does not prove production arbitration,

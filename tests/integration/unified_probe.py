@@ -23,7 +23,8 @@ import termios
 import threading
 import time
 
-from amap_codex.app_server import AppServerDelivery, find_event_in_history
+from amap_codex.app_server import AppServerDelivery
+from _unified_evidence import assert_original_pointer, assert_retained_history, history_snapshot
 from _unified_ws import UnixRPC
 
 
@@ -184,21 +185,24 @@ async def probe(output):
             for lane, number in [('peer', 2), ('mail', 3)]:
                 payload = {'event_id': 'synthetic_event_' + lane, 'lane': lane,
                            'notice_id': 'synthetic_notice_' + lane}
-                payloads.append(payload)
                 result = await delivery.deliver(payload, client.reserve_id())
                 assert result.state == 'accepted'
+                payloads.append((payload, result.turn_id))
                 assert await completed(client, terminal) == result.turn_id
                 await until(lambda: terminal.contains(f'UNIFIED_RESPONSE_{number}'), terminal)
             history = await client.request('thread/read', {'threadId': thread, 'includeTurns': True})
             turns = history['thread']['turns']
             assert len(turns) == 3 and turns[0]['id'] == human_turn
-            assert all(find_event_in_history(history, payload['event_id']) is not None for payload in payloads)
+            for payload, accepted_turn in payloads:
+                assert_original_pointer(history, payload, accepted_turn)
+            snapshot = history_snapshot(history)
             terminal.close()
             terminal = Terminal(ui, env, root)
             await until(lambda: terminal.contains('UNIFIED_RESPONSE_3'), terminal)
             await asyncio.sleep(.2)
             history = await client.request('thread/read', {'threadId': thread, 'includeTurns': True})
             assert len(history['thread']['turns']) == len(requests) == 3
+            assert_retained_history(snapshot, history)
             loaded = await client.request('thread/loaded/list', {})
             assert loaded['data'] == [thread]
             saved = await client.request('thread/list', {'cwd': str(root), 'limit': 10,
@@ -213,6 +217,7 @@ async def probe(output):
                 'one_backend': True, 'one_thread': True, 'human_turn_observed_by_controller': True,
                 'native_human_busy_state_visible': True, 'peer_pointer_preserved': True,
                 'mail_pointer_preserved': True, 'controller_responses_visible_in_native_tui': True,
+                'complete_pointers_in_accepted_turns': True, 'exact_ordered_history_retained': True,
                 'reattach_same_history_without_replay': True, 'turn_count': 3, 'passed': True}
             output.write_text(json.dumps(evidence, indent=2) + '\n')
             print(json.dumps(evidence))

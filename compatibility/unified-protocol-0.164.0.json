@@ -1,5 +1,5 @@
 {
-  "timestamp_utc": "2026-10-24T23:13:16.777182+00:00",
+  "timestamp_utc": "2026-10-25T11:26:14.202757+00:00",
   "codex_version": "codex-cli 0.164.0",
   "os": "Linux",
   "architecture": "aarch64",
@@ -14,6 +14,8 @@
   "peer_pointer_preserved": true,
   "mail_pointer_preserved": true,
   "controller_responses_visible_in_native_tui": true,
+  "complete_pointers_in_accepted_turns": true,
+  "exact_ordered_history_retained": true,
   "reattach_same_history_without_replay": true,
   "turn_count": 3,
   "passed": true
