@@ -41,7 +41,10 @@ The command acquires the ordinary private controller lock and all lane claims.
 It starts a private owned backend, reads the complete saved history and queue
 without loading the thread, and refuses active or queued work and another
 workspace. It records a durable adoption intent before refreshing the selected
-thread's protected policy and tools. No model input is submitted.
+thread's protected policy and tools. No model input is submitted. On the measured
+build, resume retains old developer context; adoption explicitly appends the
+current protected developer policy while idle. Original turn/item history is
+retained; that intentional developer-context addition is the policy transition.
 
 The command verifies the effective pane settings, protected MCP registry, idle
 state and exact ordered history before committing the new fingerprint, canonical
@@ -57,6 +60,9 @@ adoption command to re-observe the original history and policy. Changed history,
 selection or policy requires investigation; no reset or automatic replacement
 conversation is provided. A native policy refresh can precede journal commit,
 which is why the stopped-service requirement and durable hold matter.
+An explicit retry after an uncertain context-update acknowledgement may append
+the same protected policy again. It never repeats human or AMAP turn input and
+is not an automatic recovery path.
 
 ## Dispose of unresolved incoming work
 
@@ -113,7 +119,7 @@ queued artifacts after SIGKILL, explicitly cancels before resume and verifies no
 queued/human replay or fabricated delivery. The committed
 [build-specific receipt](../compatibility/unified-maintenance-0.164.0.json) is
 source evidence; it is not an actual-router round trip or host deployment test.
-Twenty critical maintenance mutations run only on independent scratch copies.
+Twenty-two critical maintenance mutations run only on independent scratch copies.
 Independent source review, adapter configuration/verification and the operator's
 host pilot remain gates. Additional native controls and exceptional history
 repair need their own contracts; these commands do not perform arbitrary

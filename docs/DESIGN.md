@@ -34,7 +34,7 @@ Revisit it when any of these holds:
 
 ### 1.3 Interactive participation and operator visibility
 
-The supervisor-owned conversation is distinct from a native interactive Codex
+In default separate mode, the supervisor-owned conversation is distinct from a native interactive Codex
 conversation sharing its workspace. The connector's `interactive` entry point
 provides the latter with the protected AMAP tools, fleet guidance and read-only
 `amap_fleet.activity` tool. It retains native permissions and existing developer
@@ -48,13 +48,13 @@ assets and arrange visible terminal surfaces through their generic launch
 facilities. No native transcript mirroring or dual ownership is implied.
 See [INTERACTIVE.md](INTERACTIVE.md) for commands and adapter acceptance criteria.
 
-The next proposed mode uses one canonical conversation for operator input and
+The experimental opt-in unified mode uses one canonical conversation for operator input and
 incoming work. [UNIFIED.md](UNIFIED.md) records its staged implementation plan,
 the successful native-TUI feasibility probe, native queuing as the primary
 implementation path, ownership and migration constraints, and remaining
 reliability gates. The connector retains AMAP admission and reconciliation;
-native Codex owns queued turn scheduling. It does not change this release's
-delivery mode.
+native Codex owns queued turn scheduling. Separate mode remains the default;
+unified mode requires explicit configuration and a reviewed transition.
 
 ## 2. Scope
 
@@ -352,6 +352,7 @@ Suggested event states:
 | --- | --- |
 | `pending` | Admitted and persisted; eligible when the thread is idle |
 | `dispatching` | Attempt committed before writing the request; possible delivery window begins |
+| `queued` | Unified native queue admitted the pointer; original execution input has not yet been established |
 | `accepted` | Correlated app-server acceptance observed and persisted; never automatically redeliver |
 | `finished` | Associated turn reached a terminal status; store completed/failed/interrupted separately |
 | `refused` | Deterministic admission failure; operator action required to revisit |

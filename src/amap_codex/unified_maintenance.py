@@ -90,6 +90,13 @@ async def adopt(config, config_path, previous, thread_id, note, *, env=None):
                 or Path(result.get('cwd', '')).resolve() != Path(config.cwd).resolve()):
             raise IntegrityConflict('adoption did not retain the selected thread and configured pane settings')
         await validate_tools(client, thread_id, protected)
+        # Resuming a populated history retains its old developer context on
+        # the measured build. Refresh it explicitly while idle, under the
+        # durable adoption intent, using the same protected role as native
+        # interactive adoption. This is context, never a model input/turn.
+        await client.request('thread/inject_items', {'threadId': thread_id, 'items': [
+            {'type': 'message', 'role': 'developer', 'content': [
+                {'type': 'input_text', 'text': settings['developerInstructions']}]}]})
         after, pending = await snapshot(client, thread_id)
         if pending or history_digest(after) != original or after['thread']['status']['type'] != 'idle':
             raise IntegrityConflict('history changed during adoption; no new binding was committed')

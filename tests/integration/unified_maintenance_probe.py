@@ -14,6 +14,7 @@ from amap_codex.native_queue import snapshot
 from amap_codex.unified import UnifiedService
 from amap_codex.unified_attach import attachment_argv
 from amap_codex.unified_maintenance import adopt, dispose, history_digest
+from amap_codex.unified_policy import GUIDANCE
 from unified_runtime_probe import configuration, publish, settle
 from unified_probe import Terminal, until
 
@@ -50,8 +51,11 @@ async def adoption(root, build):
         await settle(service, lambda: service.journal.event(event)['state'] == 'finished', terminal)
         await until(lambda: terminal.contains('NATIVE_QUEUE_RESPONSE_2'), terminal)
         assert len(provider.requests) == 2
+        assert GUIDANCE.splitlines()[0] in json.dumps(provider.requests[-1])
+        assert config.operator_instructions.read_text() in json.dumps(provider.requests[-1])
         return {'operator_selected_history_retained_exactly': True, 'other_saved_history_retained': True,
                 'adoption_submits_no_model_input': True, 'protected_policy_and_tools_refreshed': True,
+                'operator_policy_present_in_actual_model_request': True,
                 'next_peer_turn_visible_in_adopted_pane': True}
     finally:
         if terminal: terminal.close()

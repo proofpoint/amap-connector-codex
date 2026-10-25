@@ -397,5 +397,5 @@ resume, without replay or invented delivery. The fixture uses disposable homes,
 synthetic localhost inference and no router or fleet traffic.
 
 See [the maintenance contract](../docs/UNIFIED_MAINTENANCE.md) for operator
-preconditions, interrupted-operation holds and the 20 scratch-copy guard
+preconditions, interrupted-operation holds and the 22 scratch-copy guard
 mutations. Independent review and adapter/operator acceptance remain required.

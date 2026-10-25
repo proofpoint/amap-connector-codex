@@ -1,5 +1,5 @@
 {
-  "timestamp_utc": "2026-10-25T15:31:38.752501+00:00",
+  "timestamp_utc": "2026-10-25T15:43:22.499476+00:00",
   "codex_version": "codex-cli 0.164.0",
   "os": "Linux",
   "architecture": "aarch64",
@@ -11,6 +11,7 @@
     "other_saved_history_retained": true,
     "adoption_submits_no_model_input": true,
     "protected_policy_and_tools_refreshed": true,
+    "operator_policy_present_in_actual_model_request": true,
     "next_peer_turn_visible_in_adopted_pane": true
   },
   "cancellation": {

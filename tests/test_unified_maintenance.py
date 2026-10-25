@@ -41,9 +41,9 @@ class Native:
             item = {'id': 'queue1', 'clientUserMessageId': params['clientUserMessageId'], 'input': params['input']}
             self.pending.append(item)
             return {'queuedSubmission': item}
-        if method in {'thread/resume', 'thread/queue/delete'}:
+        if method in {'thread/resume', 'thread/inject_items', 'thread/queue/delete'}:
             with sqlite3.connect(self.config.state_dir / 'journal.sqlite3') as db:
-                table = 'unified_adoptions' if method == 'thread/resume' else 'native_queue_deletions'
+                table = 'native_queue_deletions' if method == 'thread/queue/delete' else 'unified_adoptions'
                 assert db.execute(f"SELECT state FROM {table}").fetchone()[0] == 'planned'
         if method == 'thread/queue/delete':
             if self.failure == 'false_ack': return {'deleted': False}
@@ -58,6 +58,9 @@ class Native:
             if self.failure == 'resume_ack': raise Uncertain('synthetic lost resume acknowledgement')
             return {'thread': {'id': THREAD}, 'cwd': self.config.cwd, 'model': 'fixture',
                     'approvalPolicy': self.config.approval_policy, 'sandbox': {'type': 'workspaceWrite'}, **self.settings}
+        if method == 'thread/inject_items':
+            if self.failure == 'policy_ack': raise Uncertain('synthetic lost protected-context acknowledgement')
+            return {}
         if method == 'mcpServerStatus/list':
             servers = self.config.trusted_overrides()['mcp_servers']
             return {'data': [{'name': n, 'tools': dict.fromkeys(d['enabled_tools'], {})} for n, d in servers.items()]
@@ -105,6 +108,10 @@ def test_adoption_retains_original_history_and_commits_policy_without_model_inpu
     result = asyncio.run(maintenance.adopt(target, Path('/unused'), old, THREAD, 'Operator selected history'))
     assert result['history_retained'] and not result['model_input_submitted']
     assert [m for m, _ in native.calls].count('thread/resume') == 1
+    refresh = next(p for m, p in native.calls if m == 'thread/inject_items')
+    assert refresh['threadId'] == THREAD
+    assert refresh['items'][0]['role'] == 'developer'
+    assert target.operator_instructions.read_text() in refresh['items'][0]['content'][0]['text']
     assert not any(m in {'thread/start', 'turn/start', 'thread/queue/add'} for m, _ in native.calls)
     with prepare(target) as j:
         assert j.thread_id == THREAD
@@ -214,11 +221,12 @@ def test_operator_hold_is_sticky_and_never_becomes_native_retry(case):
 
 
 @pytest.mark.parametrize('changed', [False, True])
-def test_interrupted_adoption_blocks_normal_start_and_migration_until_explicit_resolution(case, changed):
+@pytest.mark.parametrize('failure', ['resume_ack', 'policy_ack'])
+def test_interrupted_adoption_blocks_normal_start_and_migration_until_explicit_resolution(case, changed, failure):
     from amap_codex.journal import migrate
     old, target, native = case
     with prepare(old): pass
-    native.failure = 'resume_ack'
+    native.failure = failure
     with pytest.raises(Uncertain):
         asyncio.run(maintenance.adopt(target, Path('/unused'), old, THREAD, 'Explicit adoption'))
     with pytest.raises(StateConflict): prepare(old)

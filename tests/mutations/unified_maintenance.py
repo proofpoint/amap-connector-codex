@@ -30,6 +30,8 @@ def main():
         ('unified_maintenance.py', 'lost acknowledgement requires unchanged history', "or history_digest(history) != deletion['history_sha256']", ''),
         ('unified_maintenance.py', 'lost acknowledgement requires explicit cancellation', "if (not cancel_queued or deletion['thread_id']", "if (False or deletion['thread_id']"),
         ('unified_maintenance.py', 'operator hold remains sticky', "journal.db.execute('UPDATE native_queue_intents SET blocked=1 WHERE event_id=?', (event_id,))", 'pass'),
+        ('unified_maintenance.py', 'protected policy explicitly refreshed', "await client.request('thread/inject_items', {'threadId': thread_id, 'items': [\n            {'type': 'message', 'role': 'developer', 'content': [\n                {'type': 'input_text', 'text': settings['developerInstructions']}]}]})", 'pass'),
+        ('unified_maintenance.py', 'protected policy developer role', "'role': 'developer'", "'role': 'user'"),
     ]
     for filename, name, old, new in cases:
         path = Path('src/amap_codex') / filename
