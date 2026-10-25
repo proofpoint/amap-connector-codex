@@ -1,0 +1,53 @@
+{
+  "timestamp_utc": "2026-10-25T15:10:58.583530+00:00",
+  "codex_version": "codex-cli 0.164.0",
+  "os": "Linux",
+  "architecture": "aarch64",
+  "scope": "synthetic owned service/native TUI; no existing-history adoption or deployment acceptance",
+  "external_inference": false,
+  "user_auth_used": false,
+  "fleet_submissions": 0,
+  "ordinary": {
+    "human_and_peer_same_pane": true,
+    "queue_waits_for_human": true,
+    "claims_owned": true,
+    "queue_receipt_not_delivered": true,
+    "second_frontend_refused": true,
+    "detached_mail_completes": true,
+    "stale_generation_refused": true,
+    "restart_exact_history_without_replay": true,
+    "resume_last_maps_to_canonical": true,
+    "reattached_final_response_visible": true,
+    "incomplete_observation_holds_without_killing_work": true
+  },
+  "approval": {
+    "detached_approval_holds": true,
+    "native_prompt_through_gate": true,
+    "native_decline_prevents_command": true,
+    "passive_controller_never_answers": true
+  },
+  "model_restart": {
+    "audited_model_restart_keeps_canonical_history": true,
+    "pane_and_peer_use_selected_model": true
+  },
+  "crash_pending": {
+    "pending_survives_backend_crash": true,
+    "one_original_attempt": true,
+    "same_client_identity": true,
+    "interrupted_human_not_replayed": true
+  },
+  "changed_pending": {
+    "changed_queued_body_refused_before_resume": true,
+    "no_queued_model_execution": true
+  },
+  "mcp_workflow": {
+    "authenticated_reader_fetched_body": true,
+    "inert_reply_queued": true,
+    "submit_result_reports_pending": true,
+    "reply_correlation_preserved": true,
+    "workflow_visible_in_same_pane": true,
+    "runtime_send_acceptance": false
+  },
+  "probe_assertions_passed": true,
+  "fleet_ready": false
+}

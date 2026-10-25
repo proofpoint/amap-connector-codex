@@ -208,7 +208,7 @@ class Supervisor:
 
     def scan(self):
         counts = self.journal.status()["counts"]
-        queued = sum(counts.get(s, 0) for s in ("pending", "dispatching", "accepted", "uncertain"))
+        queued = sum(counts.get(s, 0) for s in ("pending", "dispatching", "queued", "accepted", "uncertain"))
         self.backlog = queued >= self.config.max_pending_events
         if self.backlog:
             return

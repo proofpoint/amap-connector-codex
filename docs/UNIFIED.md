@@ -2,9 +2,11 @@
 
 Status: engineering in progress. Native-TUI visibility and basic native queue
 behavior and the named queue recovery/approval scenarios are measured on Codex
-0.164.0. Owned attachment and durable AMAP queue integration are the next
-implementation gate. No production command, deployment activation or automatic
-migration is provided by this change.
+0.164.0. An experimental owned backend, guarded attachment and durable AMAP queue
+integration are now implemented; see [the runtime contract](UNIFIED_RUNTIME.md).
+History adoption, audited queue disposition, independent review and adapter
+integration remain rollout gates. No fleet activation or automatic migration
+is provided by this change.
 
 ## Decision
 
@@ -66,9 +68,11 @@ or hold when the original input is not yet inspectable. Never resubmit on that
 basis. The isolated restart test does not replay the interrupted human input.
 
 A native queue receipt proves queue admission, not execution acceptance,
-completed work or a delivered reply. Production journal integration, exhaustive
-pagination, uncertain crash windows, permissions changes, stale/foreign client
-rejection and an actual reader/submit round trip remain implementation gates.
+completed work or a delivered reply. The experimental runtime now integrates
+the journal, paginated observations, protected settings and attachment checks.
+Its authenticated reader/submit probe ends at an inert pending request; actual
+router acceptance and replies remain a pilot gate. Audited queue disposition,
+history adoption and additional crash/control cases remain engineering gates.
 
 The general collaboration pattern is durable work plus a small native wake.
 Reuse AMAP's existing runtime-owned notice files, authenticated readers,
@@ -101,8 +105,9 @@ or guessing a target with `--last`.
 The initial connection contract uses a private local Unix socket in the
 instance's execution environment. Codex's Unix listener uses WebSocket framing
 and an HTTP Upgrade handshake, not newline-delimited JSON. The feasibility
-probe includes a deliberately limited, test-only client. This is not a
-production transport implementation. The installed stdio proxy command did not
+probe includes a deliberately limited, test-only client. The runtime uses a
+separate bounded transport with protocol controls and scratch-copy mutations;
+see [its contract](UNIFIED_RUNTIME.md). The installed stdio proxy command did not
 complete initialization against that listener in the initial probe; no design
 depends on assuming the two transports are interchangeable.
 
@@ -178,7 +183,8 @@ All approval/user-input requests have one authoritative routing decision. The
 current headless responder must not race a terminal response. The native queue
 probe uses a passive controller observer, measures an offline approval hold,
 and verifies native prompt recovery and decline without executing the command.
-It does not implement generation/lease authorization for production clients.
+The experimental runtime adds generation binding and a single frontend lease,
+with connection-bound approval response IDs.
 With an eligible attached terminal, route the request to the operator; without
 one, hold the work without granting permission or replaying the accepted turn. Approval
 replies from the wrong session or backend generation are refused.
@@ -249,8 +255,8 @@ Status must expose at least:
 | Readiness checks | Named pass/fail/unknown evidence for the launch gate |
 
 These facts belong in structured status, not log parsing. Missing fields remain
-unknown to an adapter. Field encoding/versioning will be fixed with the runtime
-implementation; this document does not claim these fields already exist.
+unknown to an adapter. The experimental runtime's schema version 1 encoding is
+specified in [the runtime handoff](UNIFIED_RUNTIME.md#adapter-status-and-installation-handoff).
 
 ## Plan, implement, verify
 
@@ -268,7 +274,7 @@ implementation; this document does not claim these fields already exist.
    Use synthetic local inference and scratch-copy guard
    mutations. Record unsupported properties as gaps rather than replacing native
    behavior with an invented scheduler or claiming a production pass.
-3. **Owned attachment and queue integration.** Implement the private endpoint,
+3. **Owned attachment and queue integration — implemented, pending review.** Implements the private endpoint,
    exact instance/thread/generation binding, terminal lease, bounded lifecycle
    handling and required observation. Reuse verified native queue behavior;
    journal AMAP intent before writes, associate queue and original turn inputs,
@@ -276,9 +282,11 @@ implementation; this document does not claim these fields already exist.
    native human interaction. Add only reconciliation and binding machinery that
    native behavior does not already supply. Verify stale, foreign and extra-client
    cases, backpressure and preserved settings. No feature activation yet.
-4. **Approvals and adoption.** Add sole-owner approval routing, offline holds,
-   policy refresh and explicit history adoption. Verify no terminal/headless
-   response race, no permission expansion, no replay and retained history.
+4. **Approvals, recovery and adoption — partially implemented.** Sole-owner
+   approval routing, offline holds and native decline are verified in the runtime
+   probe. Explicit history adoption, policy transitions and audited native queue
+   disposition remain. Verify no terminal/headless response race, no permission
+   expansion, no replay and retained history for each added transition.
 5. **Adapter handoff and pilot.** Supply a protected attach descriptor and
    generic launch contract. The adapter installs/configures the service and
    makes the private endpoint accessible inside its environment. Native
@@ -335,6 +343,7 @@ Offline controls and scratch-copy mutations reject foreign threads, wrong
 client/turn IDs, edited input, duplicate originals, assistant echoes, wrong
 execution status and an observer that answers an approval request.
 
-This completes the named synthetic protocol investigation. Implementing the
-owned backend/attachment, durable AMAP submission/reconciliation and deployment
-contract remains step 3 onward; the commands above do not install unified mode.
+This completes the named synthetic protocol investigation. The experimental
+runtime implementation and its native service probe are described in
+[UNIFIED_RUNTIME.md](UNIFIED_RUNTIME.md). Steps 4 and 5 remain rollout gates;
+the commands above do not install unified mode.

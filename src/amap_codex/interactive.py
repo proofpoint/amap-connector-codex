@@ -107,7 +107,7 @@ def read_activity(config, *, limit=20, outbox=None):
     status = read_status(config)
     if status.get('instance_id') != config.instance_id:
         raise ValueError('activity journal belongs to another instance')
-    result = {'conversation': 'separate_supervisor',
+    result = {'conversation': 'unified' if config.conversation_mode == 'unified' else 'separate_supervisor',
               'meaning': 'delivery execution metadata, not proof of business completion or sending',
               'status': status, 'events': [], 'outbound': {'state': 'not_configured'}}
     path = config.state_dir/'journal.sqlite3'
@@ -127,7 +127,9 @@ def read_activity(config, *, limit=20, outbox=None):
     result['heartbeat'] = ('unknown' if not isinstance(stamp, (int, float)) else
                            'fresh' if 0 <= time.time()-stamp <= max(10, config.poll_interval_ms/1000*3)
                            else 'stale')
-    result['readiness'] = supervisor_readiness(config, status, result['heartbeat'])
+    result['readiness'] = (status.get('readiness', {'state': 'unknown', 'checks': {}})
+                           if config.conversation_mode == 'unified' else
+                           supervisor_readiness(config, status, result['heartbeat']))
     status['operator_runs'] = list(reversed(status.get('operator_runs', [])))[:limit]
     if outbox is not None:
         outbox = Path(outbox)
@@ -205,7 +207,10 @@ def serve_activity(config, *, outbox=None, source=None, output=None):
         elif method == 'ping':
             result = {}
         elif method == 'tools/list':
-            result = {'tools': [{'name': 'activity', 'description': GUIDANCE,
+            guidance = GUIDANCE
+            if config.conversation_mode == 'unified':
+                from .unified_policy import GUIDANCE as guidance
+            result = {'tools': [{'name': 'activity', 'description': guidance,
                 'annotations': {'readOnlyHint': True, 'destructiveHint': False},
                 'inputSchema': {'type': 'object', 'properties': {'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100}},
                                 'additionalProperties': False}}]}

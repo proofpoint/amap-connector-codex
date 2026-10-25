@@ -60,6 +60,7 @@ class Fixture:
         self.requests = []
         self.server_requests = []
         self.approval = approval
+        self.response_builder = None
         fixture = self
 
         class Provider(http.server.BaseHTTPRequestHandler):
@@ -72,7 +73,8 @@ class Fixture:
                     if not fixture.release.wait(30):
                         self.send_error(504)
                         return
-                wire = (command_stream(number, request['model']) if fixture.approval and number == 1 else
+                wire = (fixture.response_builder(number, request) if fixture.response_builder else
+                        command_stream(number, request['model']) if fixture.approval and number == 1 else
                         response_stream(number, request['model'], f'NATIVE_QUEUE_RESPONSE_{number}'))
                 try:
                     self.send_response(200)

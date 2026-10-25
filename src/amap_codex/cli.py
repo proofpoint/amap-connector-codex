@@ -68,14 +68,30 @@ def read_status(config):
             for key in ("backlog", "blocked_requests", "supervisor_pid", "updated_at"):
                 if key in recorded:
                     status[key] = recorded[key]
+            if config.conversation_mode == 'unified':
+                if (recorded.get('instance_id') == config.instance_id and recorded.get('fingerprint') == instance['fingerprint']
+                        and instance['fingerprint'] == config.fingerprint()
+                        and recorded.get('codex_version') == config.codex_version
+                        and (config.codex_model is None or recorded.get('effective_settings', {}).get('model') == config.codex_model)
+                        and recorded.get('canonical_thread_id') == instance['thread_id'] and recorded.get('mode') == 'unified'):
+                    for key in ('schema_version', 'mode', 'backend_generation', 'canonical_thread_id', 'endpoint',
+                                'backend_pid', 'attached_client_count', 'scheduler_state', 'active_input_source',
+                                'queue_depth', 'queue_sources', 'effective_settings', 'readiness'):
+                        if key in recorded: status[key] = recorded[key]
+                else:
+                    status['readiness'] = {'state': 'unknown', 'checks': {}}
         except (OSError, ValueError):
             pass
     return status
 
 
 async def doctor_probe(config):
+    if config.conversation_mode == 'unified':
+        raise ValueError('unified doctor is read-only; inspect the owned service status without a private probe')
     status = read_status(config)
-    if status.get("current_turn") or status.get("uncertain_count") or any(r['state'] in {'accepted','dispatching','uncertain'} for r in status.get('operator_runs', [])):
+    if status.get('fingerprint', config.fingerprint()) != config.fingerprint():
+        raise ValueError('probe configuration differs from the bound journal; no private resume was attempted')
+    if status.get("current_turn") or status.get("uncertain_count") or status.get('counts', {}).get('queued') or any(r['state'] in {'accepted','dispatching','uncertain'} for r in status.get('operator_runs', [])):
         raise RuntimeError("probe paused: instance has active or unresolved work")
     supervisor = Supervisor(config)
     try:
@@ -114,7 +130,7 @@ def main(argv=None):
         if name == 'interactive':
             interactive.add_argument('--prompt')
         interactive.add_argument('native_argv', nargs=argparse.REMAINDER,
-                                 help='-- BINARY [native options] [-- literal prompt]; new conversations only')
+                                 help='-- BINARY [native options] [-- literal prompt]; resume follows the selected mode contract')
     doctor = commands.add_parser("doctor", help="check local paths/config; does not send a notice")
     doctor.add_argument("--probe", action="store_true", help="also initialize/start or resume app-server")
     kickoff = commands.add_parser('kickoff', help='queue privileged work on the existing controller')
@@ -137,8 +153,14 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s", stream=sys.stderr)
     try:
         config = Config.load(args.config, create_state=args.command in {"run", "recover", "guard-command", "recover-operator"})
+        if config.conversation_mode == 'unified' and args.command in {'recover', 'recover-operator'}:
+            raise ValueError('unified recovery requires native pending-queue disposition; this command currently supports separate mode only')
         if args.command == "run":
-            asyncio.run(Supervisor(config).run())
+            if config.conversation_mode == 'unified':
+                from .unified import UnifiedService
+                asyncio.run(UnifiedService(config, args.config).run())
+            else:
+                asyncio.run(Supervisor(config).run())
         elif args.command == 'guard-command':
             from .guard_command import run_guarded
             return asyncio.run(run_guarded(config))
@@ -178,15 +200,22 @@ def main(argv=None):
                 native = native[1:]
                 if getattr(args, 'prompt', None) is not None:
                     raise ValueError('use either --prompt or a native argv, not both')
-            argv = asyncio.run(interactive_argv(config, args.config, binary=args.binary,
-                                               outbox=args.outbox_dir, native_argv=native or None,
-                                               prepare_resume=args.command == 'interactive'))
+            if config.conversation_mode == 'unified':
+                from .unified_attach import attachment_argv
+                argv = attachment_argv(config, binary=args.binary, native_argv=native or None)
+            else:
+                argv = asyncio.run(interactive_argv(config, args.config, binary=args.binary,
+                                                   outbox=args.outbox_dir, native_argv=native or None,
+                                                   prepare_resume=args.command == 'interactive'))
             if args.command == 'interactive-args':
                 print(json.dumps(argv))
             else:
-                print('AMAP tools enabled. Incoming work runs in the separate supervisor conversation.\n'
-                      'Use amap_fleet.activity in this conversation; open `amap-codex --config CONFIG activity --follow`\n'
-                      'in another terminal for continuous supervisor visibility.', file=sys.stderr, flush=True)
+                if config.conversation_mode == 'unified':
+                    print('AMAP unified conversation: operator input and incoming work share this pane.', file=sys.stderr, flush=True)
+                else:
+                    print('AMAP tools enabled. Incoming work runs in the separate supervisor conversation.\n'
+                          'Use amap_fleet.activity in this conversation; open `amap-codex --config CONFIG activity --follow`\n'
+                          'in another terminal for continuous supervisor visibility.', file=sys.stderr, flush=True)
                 if args.prompt is not None:
                     argv += ['--', args.prompt]
                 os.execvp(argv[0], argv)

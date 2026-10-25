@@ -157,7 +157,7 @@ class Journal:
                     detail = "publication integrity conflict: artifacts changed for recorded notice"
                     self._audit(prior["event_id"], "integrity_conflict", detail)
                     self.db.execute("UPDATE instance SET last_error=?", (detail,))
-                    if prior["state"] in {"pending", "dispatching", "uncertain"}:
+                    if prior["state"] in {"pending", "dispatching", "queued", "uncertain"}:
                         self._set(prior["event_id"], "uncertain", detail)
                         self._outcome(prior["event_id"], "held", detail)
                 inserted = False
@@ -172,23 +172,27 @@ class Journal:
     def next_pending(self):
         if self.operator_blocked():
             return None
-        if self.db.execute("SELECT 1 FROM events WHERE state IN ('dispatching','accepted','uncertain') LIMIT 1").fetchone():
+        if self.db.execute("SELECT 1 FROM events WHERE state IN ('dispatching','queued','accepted','uncertain') LIMIT 1").fetchone():
             return None
         return self._dict(self.db.execute("SELECT * FROM events WHERE state='pending' AND eligible_at<=? ORDER BY created_at,event_id LIMIT 1", (self.clock(),)).fetchone())
 
     def begin_attempt(self, event_id, rpc_id):
         with self._transaction():
-            row = self._event(event_id)
-            if not self.thread_id: raise StateConflict("bind thread before dispatch")
-            if self.operator_blocked(): raise StateConflict('operator work active or uncertain')
-            if row["state"] != "pending" or row["eligible_at"] > self.clock():
-                raise StateConflict("event is not eligible")
-            if self.db.execute("SELECT 1 FROM events WHERE state IN ('dispatching','accepted','uncertain') LIMIT 1").fetchone():
-                raise StateConflict("instance already active or uncertain")
-            number = self.db.execute("SELECT COALESCE(MAX(number),0)+1 FROM attempts WHERE event_id=?", (event_id,)).fetchone()[0]
-            self.db.execute("INSERT INTO attempts(event_id,number,rpc_id,started_at,state) VALUES(?,?,?,?,?)", (event_id,number,json.dumps(rpc_id),self.clock(),"dispatching"))
-            self._set(event_id,"dispatching", "")
-            return number
+            return self._begin_attempt(event_id, rpc_id)
+
+    def _begin_attempt(self, event_id, rpc_id):
+        """Caller holds the transaction; queue intent can commit with dispatch."""
+        row = self._event(event_id)
+        if not self.thread_id: raise StateConflict("bind thread before dispatch")
+        if self.operator_blocked(): raise StateConflict('operator work active or uncertain')
+        if row["state"] != "pending" or row["eligible_at"] > self.clock():
+            raise StateConflict("event is not eligible")
+        if self.db.execute("SELECT 1 FROM events WHERE state IN ('dispatching','queued','accepted','uncertain') LIMIT 1").fetchone():
+            raise StateConflict("instance already active or uncertain")
+        number = self.db.execute("SELECT COALESCE(MAX(number),0)+1 FROM attempts WHERE event_id=?", (event_id,)).fetchone()[0]
+        self.db.execute("INSERT INTO attempts(event_id,number,rpc_id,started_at,state) VALUES(?,?,?,?,?)", (event_id,number,json.dumps(rpc_id),self.clock(),"dispatching"))
+        self._set(event_id,"dispatching", "")
+        return number
 
     def _set(self,event_id,state,detail):
         self.db.execute("UPDATE events SET state=?,detail=?,updated_at=? WHERE event_id=?", (state,detail[:200],self.clock(),event_id))
@@ -201,7 +205,7 @@ class Journal:
         with self._transaction():
             row = self._event(event_id)
             if row["state"] in {"accepted","finished"} and row["turn_id"] == turn_id: return
-            if row["state"] not in {"dispatching","uncertain"}: raise StateConflict("acceptance is not applicable")
+            if row["state"] not in {"dispatching","queued","uncertain"}: raise StateConflict("acceptance is not applicable")
             self._set(event_id,"accepted","app-server accepted event into bound thread")
             self.db.execute("UPDATE events SET turn_id=?,accepted_at=? WHERE event_id=?", (turn_id,self.clock(),event_id))
             self._attempt_state(event_id,"accepted",turn_id=turn_id)
@@ -224,7 +228,7 @@ class Journal:
 
     def uncertain(self,event_id,detail):
         with self._transaction():
-            if self._event(event_id)["state"] not in {"dispatching","uncertain"}: raise StateConflict("uncertainty requires unresolved dispatch")
+            if self._event(event_id)["state"] not in {"dispatching","queued","uncertain"}: raise StateConflict("uncertainty requires unresolved dispatch")
             self._set(event_id,"uncertain",detail)
             self._attempt_state(event_id,"uncertain",detail)
             self._outcome(event_id,"held","acceptance unresolved: " + detail)
@@ -240,7 +244,7 @@ class Journal:
             self._attempt_state(event_id,"finished")
 
     def recovery_events(self):
-        return [self._dict(row) for row in self.db.execute("SELECT * FROM events WHERE state IN ('dispatching','uncertain','accepted') ORDER BY created_at")]
+        return [self._dict(row) for row in self.db.execute("SELECT * FROM events WHERE state IN ('dispatching','queued','uncertain','accepted') ORDER BY created_at")]
 
     def _audit(self,event_id,action,note):
         self.db.execute("INSERT INTO audit(event_id,ts,action,note) VALUES(?,?,?,?)", (event_id,utc_now(),action,note[:1000]))
@@ -248,7 +252,7 @@ class Journal:
     def handled(self,event_id,note):
         if not isinstance(note,str) or not note.strip(): raise ValueError("audit note required")
         with self._transaction():
-            if self._event(event_id)["state"] not in {"pending","uncertain","refused","accepted"}: raise StateConflict("event cannot be marked handled")
+            if self._event(event_id)["state"] not in {"pending","queued","uncertain","refused","accepted"}: raise StateConflict("event cannot be marked handled")
             self._set(event_id,"finished","operator marked handled")
             self.db.execute("UPDATE events SET execution_status='operator_handled' WHERE event_id=?", (event_id,))
             self._audit(event_id,"handled",note)
@@ -256,7 +260,7 @@ class Journal:
     def hold(self,event_id,note):
         if not isinstance(note,str) or not note.strip(): raise ValueError("audit note required")
         with self._transaction():
-            if self._event(event_id)["state"] not in {"pending","uncertain","refused"}: raise StateConflict("event cannot be held")
+            if self._event(event_id)["state"] not in {"pending","queued","uncertain","refused"}: raise StateConflict("event cannot be held")
             self._set(event_id,"uncertain","operator hold: " + note)
             self._audit(event_id,"hold",note)
             self._outcome(event_id,"held","operator hold: " + note)
@@ -289,7 +293,7 @@ class Journal:
                 self.db.execute("UPDATE instance SET last_error=NULL WHERE instance_id=?", (self.instance_id,))
 
     def operator_blocked(self):
-        return self.db.execute("SELECT 1 FROM operator_runs WHERE state IN ('dispatching','accepted','uncertain') LIMIT 1").fetchone() is not None
+        return self.db.execute("SELECT 1 FROM operator_runs WHERE state IN ('dispatching','queued','accepted','uncertain') LIMIT 1").fetchone() is not None
 
     def operator_runs(self, *, recovery=False):
         sql = "SELECT * FROM operator_runs"
@@ -308,7 +312,7 @@ class Journal:
 
     def begin_operator(self, run_id, rpc_id):
         with self._transaction():
-            if not self.thread_id or self.operator_blocked() or self.db.execute("SELECT 1 FROM events WHERE state IN ('dispatching','accepted','uncertain') LIMIT 1").fetchone():
+            if not self.thread_id or self.operator_blocked() or self.db.execute("SELECT 1 FROM events WHERE state IN ('dispatching','queued','accepted','uncertain') LIMIT 1").fetchone():
                 raise StateConflict('instance already active or uncertain')
             cursor = self.db.execute("UPDATE operator_runs SET state='dispatching',rpc_id=?,updated_at=? WHERE run_id=? AND state='pending'", (str(rpc_id),self.clock(),run_id))
             if cursor.rowcount != 1: raise StateConflict('operator run is not pending')
@@ -384,8 +388,8 @@ def migrate(path, instance_id, fingerprint, note, *, clock=time.time):
             row = db.execute("SELECT * FROM instance").fetchone()
             if row is None or row["instance_id"] != instance_id:
                 raise IntegrityConflict("journal belongs to a different instance")
-            if db.execute("SELECT 1 FROM events WHERE state IN ('dispatching','accepted','uncertain') LIMIT 1").fetchone() \
-                    or db.execute("SELECT 1 FROM operator_runs WHERE state IN ('dispatching','accepted','uncertain') LIMIT 1").fetchone():
+            if db.execute("SELECT 1 FROM events WHERE state IN ('dispatching','queued','accepted','uncertain') LIMIT 1").fetchone() \
+                    or db.execute("SELECT 1 FROM operator_runs WHERE state IN ('dispatching','queued','accepted','uncertain') LIMIT 1").fetchone():
                 raise StateConflict("work is in flight on the bound thread; resolve it before migrating")
             db.execute("UPDATE instance SET fingerprint=?, thread_id=NULL, last_error=NULL", (fingerprint,))
             db.execute("INSERT INTO audit(event_id,ts,action,note) VALUES(NULL,?,?,?)",
