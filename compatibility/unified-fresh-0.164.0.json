@@ -1,0 +1,45 @@
+{
+  "timestamp_utc": "2026-10-26T13:50:20.356496+00:00",
+  "codex_version": "codex-cli 0.164.0",
+  "os": "Linux",
+  "architecture": "aarch64",
+  "scope": "portable fresh unified service and native TUI; no adapter or host acceptance",
+  "external_inference": false,
+  "user_auth_used": false,
+  "fleet_submissions": 0,
+  "ordinary": {
+    "fresh_canonical_bound_without_saved_history_or_model_input": true,
+    "fresh_idle_restart_retains_canonical_without_model_input": true,
+    "human_and_peer_same_pane": true,
+    "queue_waits_for_human": true,
+    "claims_owned": true,
+    "queue_receipt_not_delivered": true,
+    "second_frontend_refused": true,
+    "detached_mail_completes": true,
+    "stale_generation_refused": true,
+    "restart_exact_history_without_replay": true,
+    "resume_last_maps_to_canonical": true,
+    "reattached_final_response_visible": true,
+    "incomplete_observation_holds_without_killing_work": true
+  },
+  "probe_assertions_passed": true,
+  "fleet_ready": false,
+  "negative_controls": {
+    "omit_empty_thread_name_on_scratch_copy": {
+      "exit_nonzero": true,
+      "startup_readiness": {
+        "state": "holding",
+        "checks": {
+          "backend_live": "pass",
+          "canonical_binding": "unknown",
+          "configuration_matches": "pass",
+          "protected_tools": "pass",
+          "native_reconciled": "unknown",
+          "publication_resolved": "pass"
+        }
+      },
+      "model_requests": 0,
+      "repository_source_modified": false
+    }
+  }
+}
