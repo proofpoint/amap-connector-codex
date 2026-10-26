@@ -17,9 +17,12 @@ conversation, rather than maintaining a second model conversation. A terminal
 is an attachable client of the durable backend; closing it does not transfer
 claims or cancel incoming work.
 
-Keep the existing headless/separate mode supported. Unified mode will be an
-explicit configuration choice, with its own startup and migration checks. It
-must remain independent of any deployment adapter or terminal multiplexer.
+Keep the existing headless/separate mode supported. Unified mode is an explicit
+connector configuration choice, with its own startup and migration checks. A
+deployment can choose it as the fleet-wide default for new Codex instances;
+workspaces then need no individual opt-in. It must remain independent of any
+deployment adapter or terminal multiplexer. See the
+[fresh-instance bootstrap contract](UNIFIED_RUNTIME.md#fresh-instances-and-deployment-defaults).
 
 Use Codex's native queued-input mechanism as the primary delivery path. The
 connector admits durable AMAP notices, queues a protected lookup pointer into

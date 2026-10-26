@@ -1,10 +1,9 @@
 # Unified runtime engineering contract
 
-Status: experimental source implementation, pending independent review and
-adapter integration. The synthetic native runtime probe covers the service,
-not deployment acceptance. [Explicit history adoption and audited queue
-disposition](UNIFIED_MAINTENANCE.md) are implemented separately, with stopped-service
-native evidence. Their independent review and adapter acceptance remain rollout
+Status: experimental source implementation. The synthetic native runtime probe
+covers the service, not deployment acceptance. [Explicit history adoption and
+audited queue disposition](UNIFIED_MAINTENANCE.md) have separate stopped-service
+native evidence. Adapter bootstrap and actual-host acceptance remain distinct
 gates. Unified `recover` supports explicit hold/handled disposition and optional
 pending cancellation; it refuses retry.
 
@@ -64,6 +63,42 @@ Closing a terminal preserves the service, incoming work and conversation.
 These commands describe the new source contract, not commands to apply an
 unreviewed change to a running fleet. Mode changes keep the journal and require
 the existing explicit migration rules; do not delete state to activate this mode.
+
+### Fresh instances and deployment defaults
+
+A deployment may select unified mode once for its fleet, then render the explicit
+configuration above for every newly created Codex instance. No per-workspace
+thread UUID or saved-conversation adoption is required for a genuinely fresh
+instance. The connector's separate-mode configuration remains supported; the
+deployment's fleet policy chooses the default.
+
+`UnifiedService.start` creates a persistent native conversation when the instance
+has no canonical binding. It names the empty conversation so the measured native
+build persists it, validates its protected tools and effective settings, and
+commits the native thread ID and policy binding before accepting inputs. Creating
+the conversation submits no human or AMAP model input. Fresh terminal startup
+and `resume --last` attach to this registered conversation; neither selects an
+ambient saved history. Subsequent launches retain the same canonical binding.
+
+An adapter must distinguish fresh initialization from history adoption. Its
+durable initialization record must establish the intended namespace, workspace,
+protected configuration and settings before enabling startup. An existing
+separate-mode journal, previous binding, unfinished transition or unknown retained
+state is not proof of freshness. Refuse it with explicit operator instructions;
+never clear it, adopt another history or fabricate adoption confirmation.
+
+If the adapter validates complete native startup argv before releasing incoming
+work, that validation must also work before a fresh canonical UUID exists. Bind
+the selection to the protected configuration and execution generation, permit
+only the owned canonical target, and validate the resulting journal binding and
+service readiness before attachment. Missing or conflicting evidence holds
+startup. Do not introduce a separate temporary conversation to break the
+bootstrap dependency.
+
+The operator may choose to retire and recreate old instances instead of migrating
+their history. That is an explicit deployment lifecycle action. Installing source
+or selecting a new default does not authorize deleting old state, resetting
+delivery journals, cancelling pending work or replaying messages.
 
 ## Native ownership and recovery
 
@@ -189,6 +224,18 @@ python -m pytest tests
 python vendor/amap-spec/fixtures/validate.py
 PYTHONPATH=src python tests/integration/unified_runtime_probe.py --output /tmp/unified-runtime.json
 ```
+
+The focused fresh-start probe also proves canonical binding and an idle restart
+before any model input, followed by the shared human/peer, detached mail and
+retained-history restart scenario:
+
+```sh
+PYTHONPATH=src python tests/integration/unified_fresh_probe.py --output /tmp/unified-fresh.json
+```
+
+Its [build-specific receipt](../compatibility/unified-fresh-0.164.0.json) is
+portable connector evidence. It does not validate an adapter's initialization
+record, deployment default or operator lifecycle procedure.
 
 The opt-in native probe uses disposable homes and deterministic localhost
 Responses events. It covers busy human/peer visibility, detached mail, one-client
