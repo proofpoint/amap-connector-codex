@@ -12,6 +12,53 @@ def journal(tmp_path,clock=None):
     kwargs = {'clock':clock} if clock else {}
     return Journal(tmp_path/'journal.db','instance-a','config-fingerprint','codex-cli 0.160.1','gpt-test',**kwargs)
 
+
+def test_unused_thread_release_checks_binding_and_audits_atomically(tmp_path):
+    with journal(tmp_path) as db:
+        db.bind_thread('old-thread')
+        for invalid in ('different-thread', '', None):
+            with pytest.raises(IntegrityConflict, match='bound thread'):
+                db.release_unused_thread(invalid)
+            assert db.thread_id == 'old-thread'
+        assert db.db.execute('SELECT COUNT(*) FROM audit').fetchone()[0] == 0
+        db.release_unused_thread('old-thread')
+        assert db.thread_id is None
+        assert db.db.execute('SELECT action FROM audit').fetchone()[0] == 'unused_thread_released'
+        db.bind_thread('replacement')
+    with journal(tmp_path) as db:
+        assert db.thread_id == 'replacement'
+
+
+def test_unused_thread_release_rolls_back_binding_when_audit_fails(tmp_path, monkeypatch):
+    with journal(tmp_path) as db:
+        db.bind_thread('old-thread')
+        def fail_audit(*args):
+            raise OSError('synthetic audit failure')
+        monkeypatch.setattr(db, '_audit', fail_audit)
+        with pytest.raises(OSError, match='audit failure'):
+            db.release_unused_thread('old-thread')
+        assert db.thread_id == 'old-thread'
+
+
+@pytest.mark.parametrize('table', ['events', 'attempts', 'operator_runs'])
+def test_unused_thread_release_refuses_every_ledger_even_orphan_attempt(tmp_path, table):
+    with journal(tmp_path) as db:
+        db.bind_thread('old-thread')
+        if table == 'events':
+            db.admit(admission())
+        elif table == 'operator_runs':
+            db.admit_operator('operator', 'a' * 64)
+        else:
+            # Corrupt/legacy orphan metadata must not look like an empty ledger.
+            db.db.execute('PRAGMA foreign_keys=OFF')
+            db.db.execute("INSERT INTO attempts(event_id,number,rpc_id,started_at,state) VALUES('orphan',1,'42',0,'unsent')")
+            db.db.execute('PRAGMA foreign_keys=ON')
+        with pytest.raises(StateConflict, match='recorded work'):
+            db.release_unused_thread('old-thread')
+        assert db.thread_id == 'old-thread'
+        assert db.db.execute('SELECT COUNT(*) FROM audit').fetchone()[0] == 0
+        assert db.db.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 1
+
 def test_durable_acceptance_no_replay(tmp_path):
     db = journal(tmp_path)
     first,second = admission(),admission('receiver_notice_999')

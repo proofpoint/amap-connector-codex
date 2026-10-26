@@ -9,8 +9,9 @@ import sys
 import pytest
 
 from amap_codex.claims import ClaimHeld
+from amap_codex.app_server import RPCError
 from amap_codex.config import Config, Lane
-from amap_codex.journal import Journal
+from amap_codex.journal import Journal, StateConflict
 from amap_codex.cli import read_status
 from amap_codex.spool import Scanner, event_id
 from amap_codex.supervisor import Ownership, Supervisor
@@ -51,6 +52,107 @@ async def until(supervisor, predicate, timeout=2):
         await supervisor.tick()
         await asyncio.sleep(0.01)
     assert predicate(), 'controller did not reach expected state'
+
+
+def test_missing_resume_rollout_keeps_binding_and_never_dispatches_or_replaces_thread(tmp_path):
+    config = config_for(tmp_path, 'resume_missing')
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(),
+                 config.codex_version, config.codex_model) as journal:
+        journal.bind_thread('thread-fixture')
+    async def check():
+        supervisor = Supervisor(config)
+        with pytest.raises(RPCError, match='during thread/resume: saved rollout not found'):
+            await supervisor.start()
+        assert supervisor.delivery.client.turn_starts == 0
+        assert supervisor.delivery.thread_id is None
+        assert supervisor.delivery.client.process.returncode is not None
+        assert not config.lanes[0].claim_path.exists()
+        assert not (config.state_dir / 'process.json').exists()
+    asyncio.run(check())
+    assert read_status(config)['thread_id'] == 'thread-fixture'
+    assert not Path(config.launch_argv[-1]).exists()
+
+
+def test_missing_unused_rollout_is_replaced_under_claims_and_audited(tmp_path):
+    config = config_for(tmp_path, 'resume_missing_matching')
+    old = '00000000-0000-0000-0000-000000000001'
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(),
+                 config.codex_version, config.codex_model) as journal:
+        journal.bind_thread(old)
+    async def check():
+        supervisor = Supervisor(config)
+        try:
+            await supervisor.start()
+            assert supervisor.journal.thread_id == supervisor.delivery.thread_id == 'thread-fixture'
+            assert config.lanes[0].claim_path.exists()
+            assert supervisor.delivery.client.turn_starts == 0
+            rows = supervisor.journal.db.execute(
+                "SELECT action,note FROM audit WHERE action='unused_thread_released'").fetchall()
+            assert len(rows) == 1 and old in rows[0]['note']
+            assert supervisor.journal.status()['counts'] == {}
+            # Normal dispatch still uses the retained journal after recovery.
+            publish(config)
+            await until(supervisor, lambda: supervisor.journal.status()['counts'].get('finished') == 1)
+            assert len(history(config)) == 1
+        finally:
+            await supervisor.close()
+    asyncio.run(check())
+
+
+def test_failed_replacement_keeps_release_audit_and_next_start_can_create(tmp_path, monkeypatch):
+    config = config_for(tmp_path, 'resume_missing_matching')
+    old = '00000000-0000-0000-0000-000000000001'
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(), config.codex_version, config.codex_model) as journal:
+        journal.bind_thread(old)
+    async def check():
+        monkeypatch.setenv('FAKE_START_ERROR', '1')
+        first = Supervisor(config)
+        with pytest.raises(RPCError, match='during thread/start'):
+            await first.start()
+        assert read_status(config)['thread_id'] is None
+        assert first.delivery.client.turn_starts == 0
+        assert not config.lanes[0].claim_path.exists()
+        monkeypatch.delenv('FAKE_START_ERROR')
+        second = Supervisor(config)
+        try:
+            await second.start()
+            assert second.journal.thread_id == 'thread-fixture'
+            assert second.journal.db.execute("SELECT COUNT(*) FROM audit WHERE action='unused_thread_released'").fetchone()[0] == 1
+            assert second.delivery.client.turn_starts == 0
+        finally:
+            await second.close()
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize('work', ['pending', 'finished', 'uncertain', 'operator'])
+def test_missing_rollout_with_recorded_work_refuses_replacement(tmp_path, work):
+    config = config_for(tmp_path, 'resume_missing_matching')
+    old = '00000000-0000-0000-0000-000000000001'
+    with Journal(config.state_dir, config.instance_id, config.fingerprint(),
+                 config.codex_version, config.codex_model) as journal:
+        journal.bind_thread(old)
+        if work == 'operator':
+            journal.admit_operator('retained-operator', 'a' * 64)
+        else:
+            eid = publish(config)
+            for admission in Scanner().scan(config.lanes[0], config.instance_id, config.self_address):
+                journal.admit(admission)
+            if work != 'pending':
+                journal.begin_attempt(eid, 42)
+                if work == 'finished':
+                    journal.accept(eid, 'old-turn')
+                    journal.finish(eid, 'completed')
+    async def check():
+        supervisor = Supervisor(config)
+        with pytest.raises(StateConflict, match='recorded work'):
+            await supervisor.start()
+        assert supervisor.delivery.client.turn_starts == 0
+        assert supervisor.delivery.thread_id is None
+        assert supervisor.delivery.client.process.returncode is not None
+        assert not config.lanes[0].claim_path.exists()
+    asyncio.run(check())
+    assert read_status(config)['thread_id'] == old
+    assert not Path(config.launch_argv[-1]).exists()
 
 @pytest.mark.parametrize('mode',['normal','early_completed'])
 def test_finished_notice_is_never_replayed_after_scan_and_restart(tmp_path,mode):

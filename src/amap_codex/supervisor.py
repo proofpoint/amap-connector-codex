@@ -147,7 +147,8 @@ class Supervisor:
                                                idempotent_replay=c.outcome_idempotent_replay)
             if self.ownership.control:
                 self._record_process(os.getpid(), None)
-            thread_id = await self.delivery.start_or_resume(self.journal.thread_id)
+            thread_id = await self.delivery.start_or_resume(
+                self.journal.thread_id, release_unused=self.journal.release_unused_thread)
             self.journal.bind_thread(thread_id)
             if await self.reconcile() and not self.delivery.client.last_error:
                 self.journal.clear_operational_error()

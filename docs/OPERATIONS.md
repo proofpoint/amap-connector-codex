@@ -47,6 +47,36 @@ After a successful thread bind and clean startup reconciliation, a resolved
 work, client errors and uncertain outcome publication keep their diagnostics.
 Clearing a diagnostic never resets delivery state or retries work.
 
+App-server RPC errors identify the failed local method and numeric error code.
+Arbitrary server messages and data are excluded because they may contain sender
+content or credentials. A recognized `thread/resume` failure also reports
+`saved rollout not found`. Codex 0.164.0 can exhibit this after a thread was
+started but received no turns before shutdown: it has no persisted rollout to
+resume. This is distinct from native interactive resume, which the initial
+interactive wrapper does not support.
+
+The owning supervisor recovers this one startup case automatically: the exact
+missing-rollout response must name its bound thread, and the journal must have
+no events, dispatch attempts or operator runs of any state. While retaining its
+claims, it atomically releases the unused binding and audits
+`unused_thread_released`, then creates one replacement thread with the same
+protected configuration. It retains the journal and makes no model turn. A
+further failure is reported; this is not an unbounded startup loop. The same
+case can recover again after another idle restart.
+
+The empty-ledger check covers the entire journal's lifetime. Even a completed
+or refused prior event prevents automatic release after a later configuration
+migration. If release commits but replacement startup fails, the binding stays
+empty with its audit record; the next startup makes a fresh attempt.
+
+Any recorded work, a different thread ID or a generic RPC failure refuses that
+recovery. Preserve the journal, inspect the bound thread and delivery/operator
+states, and inspect the correct Codex home's session storage. Do not delete
+state or automatically replace threads on generic `-32600` errors. Where an
+operator establishes that replacement is appropriate, `migrate --note NOTE`
+below keeps delivery history and refuses unresolved in-flight work. Read-only
+status/activity commands and diagnostic probes do not release bindings.
+
 ## Interpret the state
 
 An **accepted** event crossed the app-server boundary and is associated with

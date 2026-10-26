@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from amap_codex.app_server import AppServerClient, AppServerDelivery, find_event_in_history
+from amap_codex.app_server import AppServerClient, AppServerDelivery, RPCError, find_event_in_history
 
 FAKE = str(Path(__file__).with_name("fake_app_server.py"))
 PAYLOAD = {"event_id": "event-exact", "lane": "mail", "notice_id": "0123456789abcdef" * 2}
@@ -66,6 +66,105 @@ def test_dead_before_write_is_proven_unsent():
         await delivery.start_or_resume()
         await delivery.stop()
         assert (await delivery.deliver(PAYLOAD, delivery.client.reserve_id())).state == "not_submitted"
+    asyncio.run(check())
+
+
+def test_resume_failure_identifies_local_method_without_server_content():
+    async def check():
+        delivery = adapter("resume_missing")
+        try:
+            with pytest.raises(RPCError) as raised:
+                await delivery.start_or_resume("thread-fixture")
+            error = raised.value
+            assert error.code == -32600
+            assert error.reason == "rollout_not_found"
+            assert "during thread/resume: saved rollout not found" in str(error)
+            assert "preserve the journal" in str(error)
+            assert "00000000" not in str(error)
+            assert "SECRET" not in repr(vars(error))
+            assert delivery.client.turn_starts == 0
+        finally:
+            await delivery.stop()
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize("code,message", [
+    (-32600, "SECRET_SERVER_MESSAGE"),
+    (-32600, "no rollout found for thread id SECRET_SERVER_MESSAGE"),
+    (-32600, "no rollout found for thread id 00000000-0000-0000-0000-000000000001\nSECRET_SERVER_MESSAGE"),
+    (-32603, "no rollout found for thread id 00000000-0000-0000-0000-000000000001"),
+    ("SECRET_SERVER_CODE", {"secret": "SECRET_SERVER_MESSAGE"}),
+])
+def test_rpc_diagnostics_never_copy_arbitrary_server_text(code, message):
+    error = RPCError({"code": code, "message": message, "data": "SECRET_SERVER_DATA"})
+    error.at_method("thread/resume")
+    assert error.reason is None
+    assert "saved rollout not found" not in str(error)
+    assert "during thread/resume" in str(error)
+    assert "SECRET" not in str(error) + repr(vars(error))
+
+
+def test_unknown_local_method_is_not_written_to_diagnostics():
+    error = RPCError({"code": -32600}).at_method("SECRET_LOCAL_METHOD")
+    assert "during unrecognized_method" in str(error)
+    assert "SECRET" not in str(error)
+
+
+def test_missing_rollout_hint_is_only_for_resume():
+    error = RPCError({"code": -32600, "message":
+                      "no rollout found for thread id 00000000-0000-0000-0000-000000000001"})
+    error.at_method('turn/start')
+    assert str(error) == 'app-server RPC error -32600 during turn/start'
+
+
+def test_turn_rpc_error_remains_uncertain_and_identifies_turn_start():
+    async def check():
+        delivery = adapter("rpc_error")
+        try:
+            await delivery.start_or_resume()
+            result = await delivery.deliver(PAYLOAD, delivery.client.reserve_id())
+            assert result.state == "uncertain"
+            assert result.detail == "app-server RPC error -32603 during turn/start"
+            assert delivery.client.turn_starts == 1
+        finally:
+            await delivery.stop()
+    asyncio.run(check())
+
+
+def test_missing_rollout_never_releases_after_a_turn_request():
+    async def check():
+        delivery = adapter('resume_missing_matching')
+        released = []
+        delivery.client.turn_starts = 1
+        try:
+            with pytest.raises(RPCError):
+                await delivery.start_or_resume('00000000-0000-0000-0000-000000000001',
+                                               release_unused=released.append)
+            assert released == []
+            assert delivery.thread_id is None
+        finally:
+            await delivery.stop()
+    asyncio.run(check())
+
+
+@pytest.mark.parametrize('bound', [None, '00000000-0000-0000-0000-000000000001'])
+def test_missing_rollout_release_requires_existing_binding_and_explicit_callback(tmp_path, monkeypatch, bound):
+    async def check():
+        delivery = adapter('resume_missing_matching')
+        released = []
+        if bound is None:
+            monkeypatch.setenv('FAKE_START_ERROR', '1')
+        caught = None
+        try:
+            try:
+                await delivery.start_or_resume(bound, release_unused=released.append if bound is None else None)
+            except Exception as error:
+                caught = error
+            assert released == [], 'a failed initial start must not authorize a release'
+            assert isinstance(caught, RPCError), 'no callback means ordinary RPC failure, without recovery'
+            assert delivery.thread_id is None and delivery.client.turn_starts == 0
+        finally:
+            await delivery.stop()
     asyncio.run(check())
 
 

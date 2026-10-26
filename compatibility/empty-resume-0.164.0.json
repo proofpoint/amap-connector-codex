@@ -1,0 +1,21 @@
+{
+  "timestamp_utc": "2026-10-24T22:01:15.590291+00:00",
+  "codex_version": "codex-cli 0.164.0",
+  "os": "Linux",
+  "architecture": "aarch64",
+  "scope": "unused-thread restart in a disposable unauthenticated home; no fleet or native TUI acceptance",
+  "initial_start_accepted": true,
+  "rollout_files_before_restart": 0,
+  "inference": false,
+  "submissions": 0,
+  "resume_accepted": false,
+  "error_code": -32600,
+  "error_category": "rollout_not_found",
+  "diagnostic": "app-server RPC error -32600 during thread/resume: saved rollout not found; preserve the journal; recorded work requires explicit operator recovery",
+  "unused_thread_recovery": true,
+  "consecutive_idle_restarts": 2,
+  "release_audit_records": 2,
+  "journal_preserved": true,
+  "turn_start_requests": 0,
+  "user_auth_used": false
+}

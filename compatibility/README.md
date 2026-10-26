@@ -132,6 +132,35 @@ producer-backed negative control and its reverted-predicate mutation are in the
 reproducible [mutation inventory](../tests/mutations/interactive.py), alongside
 the other named guard mutations. This suite uses scratch copies only.
 
+### Restart before the first supervisor turn
+
+[empty-resume-0.164.0.json](empty-resume-0.164.0.json) records a fresh,
+non-ephemeral thread created with no turns in a disposable unauthenticated
+Codex home. After shutdown, `thread/resume` returns `-32600` with the recognized
+missing-rollout error. No rollout file existed before shutdown. Both a graceful
+stdio shutdown and process termination reproduced the failure locally. A
+`historyMode=paginated` startup also reproduced it; changing history mode is not
+a remedy. None of these probes submitted a turn or used personal credentials.
+
+Reproduce with the existing test environment:
+
+```sh
+python tests/integration/empty_resume_probe.py --output /tmp/empty-resume.json
+python tests/mutations/rpc_diagnostics.py
+python tests/mutations/unused_thread.py
+```
+
+The committed probe uses a custom provider and proxies directed at a closed
+local port. It reports only safe error categories, without thread IDs or raw
+server messages. This is evidence of an upstream persistence boundary, not
+proof of the cause of any particular deployment failure. The supervisor now recovers two consecutive idle restarts in this probe with
+zero turn requests and two durable release audit records. Replacement is
+restricted to an exact missing-rollout response for the bound thread and a
+journal with no events, attempts or operator runs of any state. All other
+bindings remain held for explicit operator recovery. No schema change, journal
+deletion or inference is involved. Native interactive resume remains a separate
+unsupported path in the initial wrapper.
+
 ## codex-cli 0.161.0 (reviewed October 7, 2026; Linux aarch64)
 
 Probes that need no login, each also re-run on 0.160.1 for comparison:
