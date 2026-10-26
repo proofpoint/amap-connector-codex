@@ -87,6 +87,19 @@ separate-mode journal, previous binding, unfinished transition or unknown retain
 state is not proof of freshness. Refuse it with explicit operator instructions;
 never clear it, adopt another history or fabricate adoption confirmation.
 
+Incoming notices can arrive before the adapter entry starts. Preserve that work
+without executing it until startup validation succeeds; pending inbound work
+alone does not establish that a previous consumer ran. Initialization custody
+must survive any supported reset that retains the delivery namespace. If a
+reset removes the conversation state while retaining that custody record, hold
+for operator recovery rather than initializing another conversation over old
+input. Include this case and queued-before-startup delivery in adapter tests.
+
+Local absence of files cannot establish that an external router retired an old
+namespace. Reusing an address after recreation requires the deployment's verified
+custody procedure. Complete erasure of all initialization and delivery evidence
+is not an automatic recovery path.
+
 If the adapter validates complete native startup argv before releasing incoming
 work, that validation must also work before a fresh canonical UUID exists. Bind
 the selection to the protected configuration and execution generation, permit
