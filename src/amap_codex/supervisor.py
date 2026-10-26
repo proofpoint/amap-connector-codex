@@ -208,7 +208,7 @@ class Supervisor:
 
     def scan(self):
         counts = self.journal.status()["counts"]
-        queued = sum(counts.get(s, 0) for s in ("pending", "dispatching", "accepted", "uncertain"))
+        queued = sum(counts.get(s, 0) for s in ("pending", "dispatching", "queued", "accepted", "uncertain"))
         self.backlog = queued >= self.config.max_pending_events
         if self.backlog:
             return
@@ -331,6 +331,8 @@ class Supervisor:
 
     def write_status(self):
         status = self.journal.status()
+        status.update(schema_version=1, mode='separate',
+                      heartbeat_max_age_seconds=max(10, self.config.poll_interval_ms / 1000 * 3))
         status.update(enabled_lanes=[l.name for l in self.config.lanes],
                       operator_runs=self.journal.operator_runs(),
                       claim_state="held" if self.ownership.claims else "released",

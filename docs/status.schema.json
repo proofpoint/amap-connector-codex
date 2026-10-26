@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AMAP Codex connector status version 1",
+  "type": "object",
+  "required": ["schema_version", "mode", "instance_id", "heartbeat_max_age_seconds"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "mode": {"enum": ["separate", "unified"]},
+    "instance_id": {"type": "string", "minLength": 1},
+    "heartbeat_max_age_seconds": {"type": "number", "exclusiveMinimum": 0},
+    "updated_at": {"type": "number"},
+    "scheduler_state": {"enum": ["idle", "active", "holding", "reconciling", "unknown"]},
+    "queue_depth": {"type": ["integer", "null"], "minimum": 0},
+    "active_input_source": {"enum": ["operator", "mail", "peer", null]},
+    "attached_client_count": {"type": "integer", "minimum": 0, "maximum": 1},
+    "readiness": {
+      "type": "object", "required": ["state", "checks"],
+      "properties": {
+        "state": {"enum": ["ready", "holding", "stopped", "unknown"]},
+        "checks": {"type": "object", "additionalProperties": {"enum": ["pass", "fail", "unknown"]}}
+      }
+    }
+  },
+  "allOf": [{
+    "if": {
+      "properties": {"mode": {"const": "unified"}, "readiness": {
+        "properties": {"state": {"const": "ready"}}, "required": ["state"]}},
+      "required": ["mode", "readiness"]
+    },
+    "then": {
+      "required": ["updated_at", "fingerprint", "backend_generation", "canonical_thread_id", "endpoint",
+        "attached_client_count", "scheduler_state", "queue_depth", "queue_sources", "effective_settings", "protected_tools_validation"],
+      "properties": {
+        "fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "backend_generation": {"type": "string", "pattern": "^[a-f0-9]{32}$"},
+        "canonical_thread_id": {"type": "string", "format": "uuid"},
+        "endpoint": {"type": "string", "pattern": "^unix:///"},
+        "scheduler_state": {"enum": ["idle", "active"]},
+        "queue_depth": {"type": "integer", "minimum": 0},
+        "queue_sources": {"type": "object", "required": ["operator", "mail", "peer"],
+          "additionalProperties": {"type": "integer", "minimum": 0}},
+        "effective_settings": {"type": "object", "required": ["model", "sandbox", "approval_policy"],
+          "properties": {"model": {"type": "string", "minLength": 1}, "sandbox": {"type": "object"},
+            "approval_policy": {"enum": ["never", "on-request", "on-failure", "untrusted"]}}},
+        "protected_tools_validation": {"type": "object", "required": ["scope", "backend_generation", "validated_at"],
+          "properties": {"scope": {"const": "startup"},
+            "backend_generation": {"type": "string", "pattern": "^[a-f0-9]{32}$"}, "validated_at": {"type": "number"}}},
+        "readiness": {"properties": {"checks": {"required": ["backend_live", "canonical_binding", "configuration_matches",
+          "protected_tools", "native_reconciled", "publication_resolved"], "additionalProperties": {"const": "pass"}}}}
+      }
+    }
+  }]
+}

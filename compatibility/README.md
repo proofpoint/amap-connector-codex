@@ -368,3 +368,26 @@ does not verify exhaustive pagination, arbitrary crash windows, multi-client
 authorization, other approval types, model/permission changes, real AMAP
 reader/submit behavior, deployment or isolation acceptance. See
 [the revised unified plan](../docs/UNIFIED.md).
+
+## Owned unified runtime (October 25, 2026; 0.164.0)
+
+[unified-runtime-0.164.0.json](unified-runtime-0.164.0.json) records the actual
+experimental service, production local transport, native TUI and journal path.
+Synthetic localhost Responses events drive the isolated tests; no user
+credentials, external inference, router or fleet traffic are used.
+
+The scenarios verify human/peer work in one pane, detached mail execution,
+one-client refusal, exact history and canonical binding across restart, native
+approval holds/decline through the guarded frontend, an audited model change,
+pending work across SIGKILL, and changed queued artifacts refused before resume.
+A deliberately incomplete observation holds new work without killing the active
+backend. Actual MCP reader, inert submit and pending-result calls run through the
+protected servers, with the final response visible in the same conversation and
+reply correlation retained. A queued file is not runtime acceptance or a send.
+
+Reproduce with `PYTHONPATH=src python tests/integration/unified_runtime_probe.py
+--output /tmp/unified-runtime.json`; use `python tests/mutations/unified_runtime.py`
+for 69 critical guard mutations on scratch copies. See
+[the runtime contract](../docs/UNIFIED_RUNTIME.md) for configuration, named status
+facts and remaining adoption/recovery/adapter gates. This evidence does not make
+the current fleet ready to activate unified mode.

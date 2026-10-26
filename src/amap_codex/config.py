@@ -56,6 +56,8 @@ class Config:
     launcher_control_timeout_seconds: float = 10
     operator_kickoff_enabled: bool = False
     trusted_config_file: Path | None = None
+    conversation_mode: str = 'separate'
+    unified_argv: list[str] | None = None
 
     @classmethod
     def load(cls, path, *, create_state=True):
@@ -115,6 +117,16 @@ class Config:
             raise ValueError("unsupported approval_policy")
         if self.delivery_mode not in {"tool_output", "wake_up"}:
             raise ValueError("unsupported delivery_mode")
+        if self.conversation_mode not in {'separate', 'unified'}:
+            raise ValueError('unsupported conversation_mode')
+        if self.conversation_mode == 'unified':
+            if (not isinstance(self.unified_argv, list) or not self.unified_argv or
+                    any(not isinstance(v, str) or not v or '\x00' in v for v in self.unified_argv)):
+                raise ValueError('unified mode requires an explicit native unified_argv')
+            if self.launcher_control_argv or self.operator_kickoff_enabled or self.trusted_config_file is None:
+                raise ValueError('unified mode requires in-environment supervision, protected tools and native operator input')
+        elif self.unified_argv is not None:
+            raise ValueError('unified_argv requires unified conversation mode')
         if type(self.outcome_idempotent_replay) is not bool:
             raise ValueError("outcome_idempotent_replay must be an explicit boolean router agreement")
         if type(self.operator_kickoff_enabled) is not bool:
@@ -205,6 +217,9 @@ class Config:
 
     def fingerprint(self):
         value = asdict(self)
+        if value['conversation_mode'] == 'separate':
+            value.pop('conversation_mode')
+            value.pop('unified_argv')
         # Operational polling/timeouts can change without migrating mailbox state.
         for key in ("poll_interval_ms", "max_pending_events", "rpc_timeout_seconds", "turn_watchdog_seconds", "shutdown_grace_seconds", "publication_grace_seconds", "launcher_control_timeout_seconds"):
             value.pop(key)
