@@ -38,7 +38,8 @@ class RPCError(Exception):
     def at_method(self, method: str):
         # This is the local request, never a method echoed by the server.
         known = {"initialize", "config/read", "thread/start", "thread/resume",
-                 "thread/read", "mcpServerStatus/list", "turn/start", "turn/interrupt"}
+                 "thread/read", "thread/list", "thread/inject_items",
+                 "mcpServerStatus/list", "turn/start", "turn/interrupt"}
         name = method if method in known else "unrecognized_method"
         self.method = name
         detail = f"app-server RPC error {self.code} during {name}"

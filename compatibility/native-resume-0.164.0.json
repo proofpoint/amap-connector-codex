@@ -1,0 +1,21 @@
+{
+  "timestamp_utc": "2026-10-24T22:28:21.020261+00:00",
+  "codex_version": "codex-cli 0.164.0",
+  "os": "Linux",
+  "architecture": "aarch64",
+  "scope": "actual native TUI resume, disposable home and rejecting local provider; no host deployment attestation",
+  "external_inference": false,
+  "user_auth_used": false,
+  "submissions": 0,
+  "cli_history_resumed": true,
+  "last_resolved_to_explicit_cli_id": true,
+  "newer_supervisor_excluded": true,
+  "original_history_present": true,
+  "protected_guidance_applied": true,
+  "four_amap_tool_sets_present": true,
+  "native_model_preserved": true,
+  "sandbox_read_only": true,
+  "approval_never": true,
+  "journal_and_claims_unchanged": true,
+  "passed": true
+}

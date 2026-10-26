@@ -5,6 +5,7 @@ lane, resumes the owned thread, or dispatches work.
 """
 import copy
 import json
+import re
 from pathlib import Path
 import sqlite3
 import sys
@@ -238,11 +239,14 @@ def toml_value(value):
     raise ValueError('unsupported interactive configuration value')
 
 
+SESSION_ID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', re.IGNORECASE)
+
+
 def native_interactive_args(argv, default_cwd):
     """Keep native tokens intact, separating options from a literal prompt.
 
-    An explicit option vocabulary lets us reject subcommands rather than
-    accidentally applying interactive-only preflight to resume or remote work.
+    An explicit option vocabulary keeps remote work and unsupported subcommands
+    out. Local resume additionally requires session-metadata preflight.
     Configuration overrides also reach the preflight process.
     """
     if not isinstance(argv, (list, tuple)) or not argv or not argv[0] or not all(isinstance(arg, str) and '\0' not in arg for arg in argv):
@@ -252,6 +256,7 @@ def native_interactive_args(argv, default_cwd):
     cwd = default_cwd
     explicit_cwd = False
     explicit_no_alt_screen = False
+    resume_mode, selector, selector_index = False, None, None
     flags = {'--no-alt-screen', '--no-daemon', '--search', '--oss', '--approve-for-me',
              '--full-auto', '--dangerously-bypass-approvals-and-sandbox',
              '--dangerously-bypass-hook-trust', '--strict-config', '--help', '-h', '--version', '-V'}
@@ -263,6 +268,18 @@ def native_interactive_args(argv, default_cwd):
         if token == '--':
             prompt = tail[index:]
             break
+        if token == 'resume' and not resume_mode:
+            resume_mode = True
+            options.append(token)
+            index += 1
+            continue
+        if resume_mode and (token == '--last' or SESSION_ID.fullmatch(token)):
+            if selector is not None:
+                raise ValueError('native resume requires exactly one selector')
+            selector, selector_index = token, len(options)
+            options.append(token)
+            index += 1
+            continue
         if token in flags:
             options.append(token)
             if token == '--no-alt-screen':
@@ -277,7 +294,7 @@ def native_interactive_args(argv, default_cwd):
         if name in {'-p', '--profile'}:
             raise ValueError('native --profile is unsupported: app-server preflight cannot load that profile')
         if name not in values:
-            raise ValueError('unsupported native option or subcommand; resume/fork and remote launches are refused; '
+            raise ValueError('unsupported native option or subcommand; fork and remote launches are refused; '
                              'put a literal prompt after native --')
         start = index
         if not equal:
@@ -299,18 +316,111 @@ def native_interactive_args(argv, default_cwd):
     defaults = [] if explicit_no_alt_screen else ['--no-alt-screen']
     if not explicit_cwd:
         defaults += ['--cd', default_cwd]
-    return binary, defaults + options, prompt, preflight, cwd
+    if resume_mode and selector is None:
+        raise ValueError('native resume subcommand requires --last or an explicit session UUID; picker is unsupported')
+    resume = None if not resume_mode else (selector, len(defaults) + selector_index)
+    return binary, defaults + options, prompt, preflight, cwd, resume
 
 
-async def interactive_argv(config, config_path, *, binary=None, outbox=None, native_argv=None):
+async def native_resume_target(client, config, cwd, selector):
+    """Resolve CLI history without loading a conversation or claiming work.
+
+    App-server-owned threads can be classified as editor sessions. Resolve
+    --last to an explicit CLI ID, so a later native lookup cannot choose the
+    supervisor or a different session. Refuse unsupported history sources.
+    """
+    from .cli import read_status
+    status = read_status(config)
+    if status.get('instance_id') != config.instance_id:
+        raise ValueError('resume journal belongs to another instance')
+    if selector == '--last':
+        result = await client.request('thread/list', {'cwd': str(Path(cwd).resolve()),
+            'sourceKinds': ['cli'], 'archived': False, 'sortKey': 'created_at',
+            'sortDirection': 'desc', 'limit': 1})
+        data = result.get('data')
+        if not isinstance(data, list) or len(data) != 1:
+            raise ValueError('no single CLI session available to resume in this workspace; use a new conversation')
+        thread = data[0]
+    else:
+        thread = (await client.request('thread/read', {'threadId': selector, 'includeTurns': False})).get('thread')
+    return validate_native_session(thread, cwd, selector, status.get('thread_id'))
+
+
+def validate_native_session(thread, cwd, selector, bound):
+    if not isinstance(thread, dict):
+        raise ValueError('native resume session metadata unavailable')
+    target = thread.get('id')
+    if not isinstance(target, str) or SESSION_ID.fullmatch(target) is None:
+        raise ValueError('native resume session ID is invalid')
+    if selector != '--last' and target.lower() != selector.lower():
+        raise ValueError('native resume metadata names a different session')
+    if isinstance(bound, str) and target.lower() == bound.lower():
+        raise ValueError('native resume must not target the supervisor-owned thread')
+    if thread.get('source') != 'cli':
+        raise ValueError('native resume supports CLI conversations only; supervisor and editor sessions are refused')
+    if not isinstance(thread.get('cwd'), str) or Path(thread['cwd']).resolve() != Path(cwd).resolve():
+        raise ValueError('native resume session belongs to a different workspace')
+    return target
+
+
+async def prepare_native_resume(client, config, target, cwd, servers, instructions):
+    """Append current protected policy to the selected CLI history, no turn.
+
+    Native resume retains old developer context. Command-line configuration
+    alone does not refresh that policy after a conversation has real history.
+    """
+    from .cli import read_status
+    resumed = (await client.request('thread/resume', {
+        'threadId': target, 'excludeTurns': True, 'config': {'mcp_servers': servers}})).get('thread')
+    status = read_status(config)
+    if status.get('instance_id') != config.instance_id:
+        raise ValueError('resume journal belongs to another instance')
+    validate_native_session(resumed, cwd, target, status.get('thread_id'))
+    if resumed.get('status') != {'type': 'idle'}:
+        raise ValueError('native resume did not establish an idle CLI conversation')
+    registered = []
+    cursor = None
+    for _ in range(10):
+        params = {'threadId': target, 'detail': 'toolsAndAuthOnly'}
+        if cursor is not None:
+            params['cursor'] = cursor
+        page = await client.request('mcpServerStatus/list', params)
+        registered.extend(page.get('data', []))
+        cursor = page.get('nextCursor')
+        if cursor is None:
+            break
+    else:
+        raise ValueError('native resume MCP registry exceeded expected bound')
+    for name, definition in servers.items():
+        matches = [server for server in registered if server.get('name') == name]
+        if (len(matches) != 1 or matches[0].get('toolsError') or not isinstance(matches[0].get('tools'), dict) or
+                set(matches[0].get('tools', {})) != set(definition['enabled_tools'])):
+            raise ValueError('native resume protected MCP registry differs from the trusted configuration')
+    await client.request('thread/inject_items', {'threadId': target, 'items': [
+        {'type': 'message', 'role': 'developer', 'content': [
+            {'type': 'input_text', 'text': instructions}]}]})
+
+
+async def interactive_argv(config, config_path, *, binary=None, outbox=None, native_argv=None, prepare_resume=False):
     if native_argv is not None and binary is not None:
         raise ValueError('use either --binary or a native argv, not both')
-    binary, options, prompt, preflight, cwd = native_interactive_args(
+    binary, options, prompt, preflight, cwd, resume = native_interactive_args(
         native_argv if native_argv is not None else [binary or 'codex'], config.cwd)
+    if resume is not None and not prepare_resume:
+        raise ValueError('native resume requires interactive execution to install current policy; interactive-args is read-only')
     trusted = config.trusted_overrides()
     if trusted is None:
         raise ValueError('interactive participation requires a protected trusted_config_file')
-    # Inspect native configuration without starting/resuming any conversation.
+    args = ['--config', str(Path(config_path).resolve()), 'activity-mcp']
+    if outbox is not None:
+        read_activity(config, outbox=outbox)  # Refuse bad observation paths before any history update.
+        args += ['--outbox-dir', str(outbox)]
+    protected = copy.deepcopy(trusted['mcp_servers'])
+    protected['amap_fleet'] = {'command': sys.executable, 'args': ['-m', 'amap_codex.cli', *args],
+        'env': {'PYTHONPATH': str(Path(__file__).resolve().parents[1])},
+        'required': True, 'enabled_tools': ['activity'], 'default_tools_approval_mode': 'approve'}
+    # Fresh launch reads configuration only. Resume loads only a verified CLI
+    # target and appends protected developer policy, never a model turn.
     client = AppServerClient([binary, *preflight, 'app-server', '--listen', 'stdio://'],
                              expected_version=config.codex_version, timeout=config.rpc_timeout_seconds)
     try:
@@ -325,20 +435,16 @@ async def interactive_argv(config, config_path, *, binary=None, outbox=None, nat
         existing = native.get('developer_instructions') or ''
         if not isinstance(existing, str):
             raise ValueError('native developer instructions must be text')
+        instructions = existing + '\n\n' + config.operator_instructions.read_text() + '\n\n' + GUIDANCE
+        if resume is not None:
+            selector, slot = resume
+            options[slot] = await native_resume_target(client, config, cwd, selector)
+            await prepare_native_resume(client, config, options[slot], cwd, protected, instructions)
     finally:
         await client.stop()
-    args = ['--config', str(Path(config_path).resolve()), 'activity-mcp']
-    if outbox is not None:
-        read_activity(config, outbox=outbox)  # Validate paths before launching.
-        args += ['--outbox-dir', str(outbox)]
-    servers = copy.deepcopy(trusted['mcp_servers'])
-    servers['amap_fleet'] = {'command': sys.executable, 'args': ['-m', 'amap_codex.cli', *args],
-        'env': {'PYTHONPATH': str(Path(__file__).resolve().parents[1])},
-        'required': True, 'enabled_tools': ['activity'], 'default_tools_approval_mode': 'approve'}
-    instructions = existing + '\n\n' + config.operator_instructions.read_text() + '\n\n' + GUIDANCE
     # Only messaging and guidance are changed. Model, sandbox, approval,
     # network, authentication and ambient tools retain their native settings.
     argv = [binary, *options]
-    for name, server in servers.items():
+    for name, server in protected.items():
         argv += ['-c', 'mcp_servers.'+name+'='+toml_value(server)]
     return argv + ['-c', 'developer_instructions='+toml_value(instructions), *prompt]

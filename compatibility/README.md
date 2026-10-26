@@ -121,9 +121,38 @@ not establish router health, adapter hold clearance or an installed payload pin.
 The native preflight was measured to retain `-c` developer instructions and
 refuse reserved MCP names introduced by separate, attached and long-form config
 options. Resume/fork, raw positional prompts, profiles and remote/worktree modes
-are explicitly unsupported by this initial wrapper contract; literal prompts
+were explicitly unsupported by the initial wrapper contract; literal prompts
 use native `--`. These are refusals, not silently dropped arguments. No native
 TUI or complete deployment acceptance is claimed by these connector probes.
+
+### Native CLI resume
+
+[native-resume-0.164.0.json](native-resume-0.164.0.json) records an actual native
+TUI session followed by wrapped resume against a rejecting localhost provider.
+No external model inference, personal authentication or fleet submission occurs.
+The original CLI user history survives, a newer supervisor/editor thread is
+excluded, all four protected AMAP tool sets reach the native request, and the
+current protected developer policy appears after the old developer context.
+The actual native request and saved turn context retain the selected model,
+read-only sandbox and never-approve policy. The connector journal and claims
+are unchanged. This proves protocol/TUI behavior, not host isolation or rollout.
+
+The probe exposed an important boundary: CLI config alone does not refresh an
+established conversation's developer context. An empty thread had appeared to
+accept new configuration, but a real prior turn retains its old instructions.
+Resume therefore explicitly appends current developer policy after verifying
+the CLI target and protected registry, without `turn/start`. The native TUI
+then resumes that exact CLI ID. Read-only argv previews refuse this operation.
+
+```sh
+python tests/integration/native_resume_probe.py --output /tmp/native-resume.json
+python tests/mutations/native_resume.py
+```
+
+The source selector is deliberately narrower than the native picker: latest
+created CLI history in the current workspace only, or an explicit CLI UUID.
+Picker/editor/remote/profile modes remain refused. Full operator acceptance is
+still separate. See [the current contract](../docs/INTERACTIVE.md).
 
 Independent review found a malformed-evidence gap: JSON null in
 `blocked_requests` was treated as an empty list. Only a valid empty list now
