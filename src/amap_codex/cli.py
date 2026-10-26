@@ -148,6 +148,11 @@ def main(argv=None):
     recovery.add_argument("--action", choices=["handled", "hold", "retry"], required=True)
     recovery.add_argument("--note", required=True)
     recovery.add_argument("--evidence-reference", help="positive evidence that prior dispatch caused no action")
+    recovery.add_argument('--cancel-queued', action='store_true', help='explicitly delete pending native input before unified disposition')
+    adoption = commands.add_parser('unified-adopt', help='adopt one idle saved history after stopping the service and native clients')
+    adoption.add_argument('--previous-config', type=Path, required=True)
+    adoption.add_argument('--thread', required=True)
+    adoption.add_argument('--note', required=True)
     operator_recovery = commands.add_parser('recover-operator', help='audit an unresolved kickoff without resending')
     operator_recovery.add_argument('run_id')
     operator_recovery.add_argument('--action', choices=['handled', 'hold'], required=True)
@@ -158,7 +163,7 @@ def main(argv=None):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s", stream=sys.stderr)
     try:
         config = Config.load(args.config, create_state=args.command in {"run", "recover", "guard-command", "recover-operator"})
-        if config.conversation_mode == 'unified' and args.command in {'recover', 'recover-operator'}:
+        if config.conversation_mode == 'unified' and args.command == 'recover-operator':
             raise ValueError('unified recovery requires native pending-queue disposition; this command currently supports separate mode only')
         if args.command == "run":
             if config.conversation_mode == 'unified':
@@ -236,12 +241,22 @@ def main(argv=None):
             from .journal import migrate
             with Ownership(config):
                 print(json.dumps(migrate(config.state_dir, config.instance_id, config.fingerprint(), args.note)))
+        elif args.command == 'unified-adopt':
+            from .unified_maintenance import adopt
+            previous = Config.load(args.previous_config, create_state=False)
+            print(json.dumps(asyncio.run(adopt(config, args.config, previous, args.thread, args.note))))
+        elif args.command == 'recover' and config.conversation_mode == 'unified':
+            from .unified_maintenance import dispose
+            print(json.dumps(asyncio.run(dispose(config, args.config, args.event_id, args.action, args.note,
+                                                cancel_queued=args.cancel_queued))))
         elif args.command == 'recover-operator':
             with Ownership(config), Journal(config.state_dir, config.instance_id,
                                            config.fingerprint(), config.codex_version, config.codex_model) as journal:
                 journal.dispose_operator(args.run_id, args.action, args.note)
                 print(json.dumps({'run_id': args.run_id, 'action': args.action, 'audited': True}))
         else:
+            if args.cancel_queued:
+                raise ValueError('--cancel-queued requires unified conversation mode')
             if not args.note.strip():
                 raise ValueError("a nonempty audit note is required")
             with Ownership(config), Journal(config.state_dir, config.instance_id,

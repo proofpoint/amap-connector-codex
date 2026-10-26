@@ -9,6 +9,11 @@ remain authoritative. A host-side deployment is an optional alternative and
 keeps supervisor state outside every agent mount. See
 [the deployment models](DESIGN.md#11-in-environment-supervision).
 
+The commands below describe default separate mode. Experimental unified mode
+uses [the owned runtime contract](UNIFIED_RUNTIME.md) and [stopped-service
+maintenance commands](UNIFIED_MAINTENANCE.md). Its `doctor --probe` is refused;
+inspect the owned service instead. Both modes declare status schema version 1.
+
 ## Start and check health
 
 Use the same explicit config for every command:
@@ -52,8 +57,9 @@ Arbitrary server messages and data are excluded because they may contain sender
 content or credentials. A recognized `thread/resume` failure also reports
 `saved rollout not found`. Codex 0.164.0 can exhibit this after a thread was
 started but received no turns before shutdown: it has no persisted rollout to
-resume. This is distinct from native interactive resume, which the initial
-interactive wrapper does not support.
+resume. This is distinct from the [native interactive resume contract](INTERACTIVE.md).
+Unified attachment selects the registered canonical conversation on the owned
+backend, without a private resume probe.
 
 The owning supervisor recovers this one startup case automatically: the exact
 missing-rollout response must name its bound thread, and the journal must have
@@ -234,6 +240,11 @@ handled retires an unresolved run without sending it again. No kickoff retry act
 
 ## Interactive sessions and background work
 
+This section describes separate mode. In unified mode operator input and incoming
+work share the registered native conversation; closing the terminal leaves the
+owned service running. Use the [unified runtime](UNIFIED_RUNTIME.md) contract for
+attachment, readiness and its remaining acceptance gates.
+
 An interactive native Codex conversation does not automatically receive the
 supervisor's tools, messages or turn transcript. Launch it with the connector's
 `interactive` command for AMAP messaging and guidance. Discover fleet peers with
@@ -249,6 +260,14 @@ task. Inspection performs no recovery or dispatch. The complete installation
 handoff and proof limits are in [INTERACTIVE.md](INTERACTIVE.md).
 
 ## Changing the configuration of a running instance
+
+For unified history adoption or protected policy changes, use the explicit
+[maintenance transition](UNIFIED_MAINTENANCE.md) and retain the previous
+configuration and referenced protected files until it completes. An adapter
+that overwrites those files in place must change its installation ordering or
+version the protected assets before an existing-instance pilot. Relaying a new
+configuration over the previous file does not preserve its fingerprint inputs.
+The ordinary migration below releases the binding; it does not retain history.
 
 The journal records the configuration fingerprint it was created under, which
 includes the operator instructions and the trusted MCP configuration. A start

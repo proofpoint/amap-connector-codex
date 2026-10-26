@@ -2,10 +2,11 @@
 
 Status: experimental source implementation, pending independent review and
 adapter integration. The synthetic native runtime probe covers the service,
-not deployment acceptance. Existing-history adoption and audited native queue
-disposition remain prerequisites for an existing-fleet rollout. Ordinary
-`recover` commands currently refuse unified mode rather than marking a retained
-native queue entry handled while leaving it runnable.
+not deployment acceptance. [Explicit history adoption and audited queue
+disposition](UNIFIED_MAINTENANCE.md) are implemented separately, with stopped-service
+native evidence. Their independent review and adapter acceptance remain rollout
+gates. Unified `recover` supports explicit hold/handled disposition and optional
+pending cancellation; it refuses retry.
 
 ## Configuration and commands
 

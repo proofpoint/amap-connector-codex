@@ -4,8 +4,9 @@ Status: engineering in progress. Native-TUI visibility and basic native queue
 behavior and the named queue recovery/approval scenarios are measured on Codex
 0.164.0. An experimental owned backend, guarded attachment and durable AMAP queue
 integration are now implemented; see [the runtime contract](UNIFIED_RUNTIME.md).
-History adoption, audited queue disposition, independent review and adapter
-integration remain rollout gates. No fleet activation or automatic migration
+Explicit history adoption and audited queue disposition now have stopped-service
+commands and isolated native evidence; see [maintenance](UNIFIED_MAINTENANCE.md).
+Independent review and adapter integration remain rollout gates. No fleet activation or automatic migration
 is provided by this change.
 
 ## Decision
@@ -71,8 +72,9 @@ A native queue receipt proves queue admission, not execution acceptance,
 completed work or a delivered reply. The experimental runtime now integrates
 the journal, paginated observations, protected settings and attachment checks.
 Its authenticated reader/submit probe ends at an inert pending request; actual
-router acceptance and replies remain a pilot gate. Audited queue disposition,
-history adoption and additional crash/control cases remain engineering gates.
+router acceptance and replies remain a pilot gate. Audited queue disposition
+and history adoption have explicit maintenance contracts; additional exceptional
+history repair and crash/control cases remain engineering gates.
 
 The general collaboration pattern is durable work plus a small native wake.
 Reuse AMAP's existing runtime-owned notice files, authenticated readers,
@@ -282,11 +284,13 @@ specified in [the runtime handoff](UNIFIED_RUNTIME.md#adapter-status-and-install
    native human interaction. Add only reconciliation and binding machinery that
    native behavior does not already supply. Verify stale, foreign and extra-client
    cases, backpressure and preserved settings. No feature activation yet.
-4. **Approvals, recovery and adoption — partially implemented.** Sole-owner
+4. **Approvals, recovery and adoption — implemented for named cases, pending review.** Sole-owner
    approval routing, offline holds and native decline are verified in the runtime
-   probe. Explicit history adoption, policy transitions and audited native queue
-   disposition remain. Verify no terminal/headless response race, no permission
-   expansion, no replay and retained history for each added transition.
+   probe. Explicit history selection, protected policy refresh and audited pending
+   queue disposition use stopped-service maintenance commands, durable operation
+   intents and exact retained history checks. Additional exceptional history repair
+   and native controls remain. Verify no terminal/headless response race, no
+   permission expansion, no replay and retained history for each added transition.
 5. **Adapter handoff and pilot.** Supply a protected attach descriptor and
    generic launch contract. The adapter installs/configures the service and
    makes the private endpoint accessible inside its environment. Native

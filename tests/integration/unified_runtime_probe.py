@@ -24,6 +24,7 @@ from amap_codex.native_queue import snapshot
 from amap_codex.spool import event_id
 from amap_codex.unified import UnifiedService
 from amap_codex.unified_attach import attachment_argv, descriptor
+from amap_codex.unified_policy import GUIDANCE
 from _unified_evidence import assert_retained_history, history_snapshot
 from native_queue_probe import Fixture
 from unified_probe import Terminal, until, response_stream
@@ -318,6 +319,8 @@ async def mcp_workflow(root, build):
     service = UnifiedService(config, path, env=provider.env)
     terminal = None
     def response(number, request):
+        assert GUIDANCE.splitlines()[0] in json.dumps(request)
+        assert config.operator_instructions.read_text() in json.dumps(request)
         if number == 1:
             namespaces = {t.get('name'): {f.get('name') for f in t.get('tools', [])}
                           for t in request['tools'] if t.get('type') == 'namespace'}

@@ -15,8 +15,9 @@ review and has not been run as a live deployment. See
 
 The experimental opt-in [unified runtime](docs/UNIFIED_RUNTIME.md) shares one
 native conversation between the operator and incoming work. It has isolated
-native-service evidence on 0.164.0; history adoption, queue recovery and adapter
-integration remain rollout gates. The default mode continues to use separate
+native-service evidence on 0.164.0, including [explicit history adoption and
+queue disposition](docs/UNIFIED_MAINTENANCE.md). Independent review, adapter
+integration and the operator's host pilot remain rollout gates. The default mode continues to use separate
 interactive and supervisor conversations. The commands below describe that
 default; use the runtime contract for unified configuration and commands.
 

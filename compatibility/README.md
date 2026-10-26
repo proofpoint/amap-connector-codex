@@ -391,3 +391,16 @@ for 69 critical guard mutations on scratch copies. See
 [the runtime contract](../docs/UNIFIED_RUNTIME.md) for configuration, named status
 facts and remaining adoption/recovery/adapter gates. This evidence does not make
 the current fleet ready to activate unified mode.
+
+## Unified maintenance (October 25, 2026; 0.164.0)
+
+[unified-maintenance-0.164.0.json](unified-maintenance-0.164.0.json) records explicit
+saved-history selection and protected policy refresh with exact retention, the
+other history left intact, and a subsequent peer response in the adopted native
+pane. It also records stopped-service deletion of changed queued work before
+resume, without replay or invented delivery. The fixture uses disposable homes,
+synthetic localhost inference and no router or fleet traffic.
+
+See [the maintenance contract](../docs/UNIFIED_MAINTENANCE.md) for operator
+preconditions, interrupted-operation holds and the 26 scratch-copy guard
+mutations. Independent review and adapter/operator acceptance remain required.
