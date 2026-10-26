@@ -272,8 +272,10 @@ needed for a deployment:
 | Shared Codex authentication | Concurrent managed refresh and real TUI/supervisor turns across rotation passed; automatic expiry-driven TUI refresh was not induced |
 | Runtime contract | Canonical claim paths/PID namespace, publish ordering, retention window, authenticated model egress |
 
-The wake-up fallback is implemented and fixture-tested but has no live proof;
-keep `delivery_mode = "tool_output"` for this build. A failed accepted turn is
+For the released separate mode, the wake-up fallback is implemented and
+fixture-tested but has no live reader/submit round-trip proof; keep
+`delivery_mode = "tool_output"` for that mode. The proposed unified mode's
+synthetic native queue evidence is recorded below. A failed accepted turn is
 an execution diagnostic and is never automatically replayed. Missing original
 input in partial history never establishes non-delivery.
 
@@ -320,3 +322,49 @@ moment past the first `turn/start`; nothing reads history there.
 recorded in the thread, and the turn after the resume carries the original
 ones. A change of operator instructions therefore needs a new thread, which
 `migrate` provides (docs/OPERATIONS.md).
+
+## Native queue investigation (October 25, 2026; 0.164.0)
+
+[native-queue-0.164.0.json](native-queue-0.164.0.json) records an isolated native
+CLI/API/TUI investigation with disposable homes and synthetic localhost
+Responses events. It uses no user credentials, external inference or fleet
+traffic. Reproduce with:
+
+```sh
+PYTHONPATH=src python tests/integration/native_queue_probe.py --output /tmp/native-queue-probe.json
+python -m pytest tests/test_native_queue_probe.py tests/test_unified_probe.py
+python tests/mutations/native_queue_probe.py
+```
+
+- Busy human turns complete before queued inputs; idle work appears in the
+  same TUI. Backend execution survives terminal detachment, and reattachment
+  retains exact ordered earlier history without another turn.
+- Two distinct pending inputs execute once after backend SIGKILL/resume.
+  Exact add receipts bind the pre-crash queue, and each retained input maps to
+  its own completed turn. The original human item/turn and provider active-input
+  sequence are checked explicitly; duplicate/missing inputs or human replay
+  cannot substitute for the second retained input.
+  Queue reads can already show a consumed entry while its original input is
+  not yet inspectable. A decreased pending count is not evidence of loss.
+- Discarding an add acknowledgement is reconciled through pending state and
+  original history without a repeated add. `clientUserMessageId` becomes
+  `userMessage.clientId`, with the exact input preserved.
+- **Repeated adds are not idempotent:** the same client ID creates distinct
+  queued entries and both execute. Reconciliation belongs in the connector.
+- Deleting pending work prevents its execution after restart; interrupting an
+  active turn preserves its interrupted result without requeuing it.
+- Native queue editing and reordering work. Editing retains client identity,
+  so ID matching without full input comparison would misattribute delivery.
+- Under read-only/on-request policy, a request holds without a terminal,
+  recovers its native prompt on attach/reattach, and a native keyboard decline
+  prevents the command. The controller observer never answers approvals.
+
+The terminal fixture establishes a controlling PTY before exec so native
+keyboard handling is exercised, as well as rendering. Offline negative controls
+and twenty-one scratch-copy mutations cover original-input identity/content/status,
+recovery membership/turn associations, provider dispatch and passive approval
+observation. This adds no production delivery mode and
+does not verify exhaustive pagination, arbitrary crash windows, multi-client
+authorization, other approval types, model/permission changes, real AMAP
+reader/submit behavior, deployment or isolation acceptance. See
+[the revised unified plan](../docs/UNIFIED.md).

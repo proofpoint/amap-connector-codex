@@ -48,6 +48,14 @@ assets and arrange visible terminal surfaces through their generic launch
 facilities. No native transcript mirroring or dual ownership is implied.
 See [INTERACTIVE.md](INTERACTIVE.md) for commands and adapter acceptance criteria.
 
+The next proposed mode uses one canonical conversation for operator input and
+incoming work. [UNIFIED.md](UNIFIED.md) records its staged implementation plan,
+the successful native-TUI feasibility probe, native queuing as the primary
+implementation path, ownership and migration constraints, and remaining
+reliability gates. The connector retains AMAP admission and reconciliation;
+native Codex owns queued turn scheduling. It does not change this release's
+delivery mode.
+
 ## 2. Scope
 
 | Include in v0.1 | Defer |
@@ -282,7 +290,7 @@ Use standalone tool output for connector event data as verified by the compatibi
 
 This is app-server tool-output delivery, not an MCP notification. The minimal example shows the lookup pointer. For a peer event, also include validated `peer_from` and `peer_message_id` from the notice, plus `in_reply_to`, `references`, and `task_id` when present and valid. These fields retain their distinct AMAP meanings. Do not include subject, preview, or body. Fetch peer request bodies through `delegation.read_message` so inherited framing remains in one place. Runtime-asserted peer identity comes from the admitted notice metadata; a display header in the body must not override it.
 
-If the selected build lacks usable standalone tool output, the bounded fallback is an operator-authored, content-free wake-up template containing only validated lane/notice identifiers and the same validated peer correlation metadata. The model fetches all sender text through the read tools. Prove and document the fallback on day one; do not inject a raw email or peer body as a user/developer instruction. If neither approach works reliably, stop the implementation spike and report the compatibility blocker.
+If the selected build lacks usable standalone tool output, the bounded fallback is an operator-authored, content-free wake-up template containing only validated lane/notice identifiers and the same validated peer correlation metadata. The proposed unified mode also uses this pointer form through the native queue, whose input becomes a user message rather than standalone tool output; see [UNIFIED.md](UNIFIED.md) for its reliability gates. The model fetches all sender text through the read tools. Prove and document the pointer path before enabling it; do not inject a raw email or peer body as a user/developer instruction. If neither approach works reliably, stop the implementation spike and report the compatibility blocker.
 
 Deploy the operator workflow through the pinned build's supported instruction mechanism, read-only and outside agent-writable configuration. Do not invent an app-server instruction field. During the spike, demonstrate that the workflow is present on both initial start and resume.
 

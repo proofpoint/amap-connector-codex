@@ -1,0 +1,22 @@
+{
+  "timestamp_utc": "2026-10-25T12:43:42.813016+00:00",
+  "codex_version": "codex-cli 0.164.0",
+  "os": "Linux",
+  "architecture": "aarch64",
+  "scope": "protocol feasibility only; scripted serialized inputs, no production arbitration or router",
+  "external_inference": false,
+  "user_auth_used": false,
+  "fleet_submissions": 0,
+  "one_backend": true,
+  "one_thread": true,
+  "human_turn_observed_by_controller": true,
+  "native_human_busy_state_visible": true,
+  "peer_pointer_preserved": true,
+  "mail_pointer_preserved": true,
+  "controller_responses_visible_in_native_tui": true,
+  "complete_pointers_in_accepted_turns": true,
+  "exact_ordered_history_retained": true,
+  "reattach_same_history_without_replay": true,
+  "turn_count": 3,
+  "passed": true
+}

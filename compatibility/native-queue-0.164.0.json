@@ -1,0 +1,57 @@
+{
+  "timestamp_utc": "2026-10-25T18:19:50.858012+00:00",
+  "codex_version": "codex-cli 0.164.0",
+  "os": "Linux",
+  "architecture": "aarch64",
+  "scope": "native queue reliability only; no production connector or isolation acceptance",
+  "external_inference": false,
+  "user_auth_used": false,
+  "fleet_submissions": 0,
+  "ordinary": {
+    "busy_waits": true,
+    "idle_visible": true,
+    "detached_executes": true,
+    "reattach_exact_history": true,
+    "settings_preserved": true
+  },
+  "recovery": {
+    "cancel_removes_pending": true,
+    "pending_before_crash": 2,
+    "pending_immediately_after_resume": 1,
+    "queued_inputs_execute_once_after_crash": true,
+    "history_client_id_and_content_match": true,
+    "retained_add_receipts_bound_before_crash": true,
+    "distinct_completed_turn_per_retained_input": true,
+    "provider_active_inputs_match_intended_dispatches": true,
+    "interrupted_human_not_replayed": true,
+    "provider_requests_after_resume": 3
+  },
+  "duplicates": {
+    "same_client_id_creates_distinct_entries": true,
+    "same_client_id_executes_twice": true,
+    "native_idempotence": false
+  },
+  "lost_ack": {
+    "ack_deliberately_discarded": true,
+    "pending_recovers_association": true,
+    "original_history_recovers_execution": true,
+    "resubmissions": 0
+  },
+  "active_cancel": {
+    "active_turn_interrupted": true,
+    "not_requeued_after_restart": true
+  },
+  "native_controls": {
+    "native_update_and_reorder_supported": true,
+    "edited_input_retains_client_id": true,
+    "exact_original_check_refuses_edited_delivery": true
+  },
+  "approvals": {
+    "detached_holds_for_approval": true,
+    "native_prompt_on_attach_and_reattach": true,
+    "observer_never_replies": true,
+    "native_decline_prevents_execution": true
+  },
+  "probe_assertions_passed": true,
+  "production_ready": false
+}
