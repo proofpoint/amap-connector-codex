@@ -96,9 +96,25 @@ async def ordinary(root, build):
     config, path, provider = configuration(root, build, hold_first=True)
     service, terminal = UnifiedService(config, path, env=provider.env), None
     try:
+        assert not (config.state_dir / 'journal.sqlite3').exists()
         await service.start()
         assert service.status['readiness']['state'] == 'ready'
         thread, generation = service.journal.thread_id, service.backend.generation
+        initial, pending = await snapshot(service.backend.client, thread)
+        assert initial['thread']['id'] == thread and initial['thread']['turns'] == []
+        assert pending == [] and provider.requests == []
+        binding = service.journal.db.execute(
+            'SELECT * FROM unified_binding WHERE instance_id=?', (config.instance_id,)).fetchone()
+        assert binding['thread_id'] == thread and len(binding['policy_hash']) == 64
+        assert binding['effective_model'] == service.effective['model']
+        await service.close()
+        service = UnifiedService(config, path, env=provider.env)
+        await service.start()
+        assert service.journal.thread_id == thread and service.backend.generation != generation
+        assert service.status['readiness']['state'] == 'ready'
+        initial, pending = await snapshot(service.backend.client, thread)
+        assert initial['thread']['turns'] == [] and pending == [] and provider.requests == []
+        generation = service.backend.generation
         argv = attachment_argv(config, native_argv=['codex', '--no-daemon', '--', 'SYNTHETIC_HUMAN'], wait=0)
         assert '--no-daemon' not in argv
         terminal = Terminal(argv, provider.env, root)
@@ -163,7 +179,9 @@ async def ordinary(root, build):
         terminal = Terminal(argv, provider.env, root)
         await until(lambda: terminal.contains('NATIVE_QUEUE_RESPONSE_3'), terminal)
         assert len(provider.requests) == 3
-        return {'human_and_peer_same_pane': True, 'queue_waits_for_human': True, 'claims_owned': True,
+        return {'fresh_canonical_bound_without_saved_history_or_model_input': True,
+            'fresh_idle_restart_retains_canonical_without_model_input': True,
+            'human_and_peer_same_pane': True, 'queue_waits_for_human': True, 'claims_owned': True,
             'queue_receipt_not_delivered': True, 'second_frontend_refused': True, 'detached_mail_completes': True,
             'stale_generation_refused': True, 'restart_exact_history_without_replay': True,
             'resume_last_maps_to_canonical': True, 'reattached_final_response_visible': True,
