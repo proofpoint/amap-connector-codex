@@ -27,6 +27,7 @@ def test_service_validates_explicit_workspace_before_binding(tmp_path, monkeypat
         blocked = []
         async def request(self, method, params):
             calls.append(method)
+            if method == 'config/read': return {'config': {'model_reasoning_effort': 'high'}}
             if method == 'thread/start':
                 result = {'thread': {'id': thread}, 'model': 'fixture', 'approvalPolicy': config.approval_policy,
                           'sandbox': {'type': 'workspaceWrite'}}
@@ -44,7 +45,7 @@ def test_service_validates_explicit_workspace_before_binding(tmp_path, monkeypat
         async def start(self): return self.client
         async def stop(self): self.process.returncode = 0
     class Gate:
-        def __init__(self, *args): self.client_count = 0
+        def __init__(self, backend, policy): self.client_count, self.policy = 0, policy
         async def start(self): pass
         async def close(self): pass
     async def resolve(*args): return {}, {}, 'policy'
@@ -63,6 +64,8 @@ def test_service_validates_explicit_workspace_before_binding(tmp_path, monkeypat
             try:
                 await service.start()
                 assert service.journal.thread_id == thread
+                assert service.effective['reasoning_effort'] == 'high'
+                assert service.gate.policy.reasoning_effort == 'high'
             finally:
                 await service.close()
         assert 'turn/start' not in calls and 'thread/queue/add' not in calls

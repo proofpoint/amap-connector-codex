@@ -53,6 +53,14 @@ permission flags are validated and consumed: native remote resume rejects CLI
 permission overrides and inherits the managed thread's verified policy.
 Model selection is reflected in the actual native client and backend.
 
+The native TUI can repeat `model_reasoning_effort` inside a resume `config`
+object. The attachment gateway accepts an empty object, or an object containing
+only that key with the same value as the managed backend's resolved effort.
+It removes the redundant config before forwarding the request, then validates
+all other controls normally. A different effort or any additional config key
+remains refused. This does not permit arbitrary native config overrides; the
+effective settings descriptor includes the managed reasoning effort.
+
 The wrapper waits at most 30 seconds for readiness, then reports the specific
 hold (for example stale heartbeat or mismatched startup validation). Adapters
 should use this one wait instead of adding another readiness polling timeout. It
