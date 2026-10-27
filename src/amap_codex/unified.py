@@ -82,13 +82,20 @@ class UnifiedService:
                 self.journal.db.execute('UPDATE instance SET thread_id=? WHERE instance_id=?', (actual, c.instance_id))
                 self.journal.db.execute('INSERT OR REPLACE INTO unified_binding VALUES(?,?,?,?)',
                                         (c.instance_id, actual, digest, result['model']))
+            native = (await client.request('config/read', {'cwd': c.cwd})).get('config')
+            if not isinstance(native, dict):
+                raise ValueError('native reasoning configuration is unavailable')
+            reasoning_effort = result.get('reasoningEffort', native.get('model_reasoning_effort'))
+            if reasoning_effort is not None and (not isinstance(reasoning_effort, str) or not reasoning_effort):
+                raise ValueError('native reasoning effort is unavailable or malformed')
             self.effective = {'model': result['model'], 'sandbox': result['sandbox'],
+                'reasoning_effort': reasoning_effort,
                 'approval_policy': result['approvalPolicy'], 'source': 'resolved shared pane settings',
                 'model_source': 'connector.codex_model' if c.codex_model is not None else 'native Codex configuration',
                 'permission_source': 'connector pane configuration'}
             policy = AttachPolicy(actual, cwd=c.cwd, model=result['model'], sandbox_name=c.sandbox,
                 sandbox=result['sandbox'], approval_policy=c.approval_policy, roots=result.get('runtimeWorkspaceRoots'),
-                approvals_reviewer=result.get('approvalsReviewer'))
+                approvals_reviewer=result.get('approvalsReviewer'), reasoning_effort=reasoning_effort)
             self.queue = NativeQueue(self.journal, client, self.backend.generation)
             self.publisher = OutcomePublisher(self.journal, c.outcome_dir, idempotent_replay=c.outcome_idempotent_replay)
             self.gate = AttachGate(self.backend, policy)

@@ -56,3 +56,49 @@ def test_native_mode_uses_backend_builtin_instructions_and_keeps_caller_data_unc
     assert result['collaborationMode']['settings']['developer_instructions'] is None
     assert result['collaborationMode']['settings']['reasoning_effort'] == 'high'
     assert params['collaborationMode']['settings']['developer_instructions'] == 'caller-provided text'
+
+
+@pytest.mark.parametrize('effort', [None, 'low', 'high', 'xhigh', 'max'])
+def test_resume_omits_only_redundant_managed_reasoning_config(effort):
+    guard = policy()
+    guard.reasoning_effort = effort
+    for config in ({}, {'model_reasoning_effort': effort}):
+        params = {'threadId': 'canonical', 'config': config, 'excludeTurns': True}
+        before = copy.deepcopy(params)
+        result = guard.normalized('thread/resume', params)
+        assert result == {**params, 'config': None}
+        assert params == before
+
+
+@pytest.mark.parametrize('config', [
+    {'model_reasoning_effort': 'low'}, {'model_reasoning_effort': None},
+    {'model_reasoning_effort': True}, {'model_reasoning_effort': {'value': 'high'}},
+    {'model_reasoning_effort': 'high', 'mcp_servers': {}},
+    {'model_reasoning_effort': 'high', 'developer_instructions': 'override'},
+    {'model': 'selected'}, {'sandbox_mode': 'read-only'}, [], 'high',
+])
+def test_resume_never_forwards_other_config_or_different_reasoning_effort(config):
+    guard = policy()
+    guard.reasoning_effort = 'high'
+    with pytest.raises(ProtocolError):
+        guard.normalized('thread/resume', {'threadId': 'canonical', 'config': config})
+
+
+@pytest.mark.parametrize('override', [
+    {'threadId': 'foreign'}, {'cwd': '/foreign'}, {'model': 'foreign'},
+    {'approvalPolicy': 'never'}, {'developerInstructions': 'override'},
+])
+def test_redundant_effort_never_authorizes_other_protected_changes(override):
+    guard = policy()
+    guard.reasoning_effort = 'high'
+    with pytest.raises(ProtocolError):
+        guard.normalized('thread/resume', {
+            'threadId': 'canonical', 'config': {'model_reasoning_effort': 'high'}, **override})
+
+
+def test_config_normalization_is_specific_to_resume():
+    guard = policy()
+    guard.reasoning_effort = 'high'
+    with pytest.raises(ProtocolError):
+        guard.normalized('turn/start', {
+            'threadId': 'canonical', 'config': {'model_reasoning_effort': 'high'}, 'input': []})

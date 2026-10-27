@@ -29,11 +29,12 @@ THREAD_METHODS = {
 
 class AttachPolicy:
     def __init__(self, thread_id, *, cwd, model, sandbox_name, sandbox, approval_policy, roots=None,
-                 approvals_reviewer='user'):
+                 approvals_reviewer='user', reasoning_effort=None):
         self.thread_id, self.cwd, self.model = thread_id, str(Path(cwd).resolve()), model
         self.sandbox_name, self.sandbox, self.approval_policy = sandbox_name, sandbox, approval_policy
         self.roots = roots
         self.approvals_reviewer = approvals_reviewer
+        self.reasoning_effort = reasoning_effort
 
     def validate(self, method, params):
         if not isinstance(method, str) or not isinstance(params, dict):
@@ -75,6 +76,15 @@ class AttachPolicy:
                 raise ProtocolError('native collaboration settings change protected model or instructions')
 
     def normalized(self, method, params):
+        if method == 'thread/resume' and isinstance(params, dict):
+            config = params.get('config')
+            if isinstance(config, dict) and (not config or (
+                    set(config) == {'model_reasoning_effort'}
+                    and config['model_reasoning_effort'] == self.reasoning_effort)):
+                # The TUI repeats its native effort selection as a config
+                # override. Inherit the managed setting instead of forwarding
+                # any caller config. All remaining controls are still checked.
+                params = {**params, 'config': None}
         self.validate(method, params)
         if params.get('collaborationMode') is not None:
             collaboration = params['collaborationMode']
